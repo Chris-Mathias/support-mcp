@@ -2,11 +2,10 @@ export function sanitizeAssistantOutput(text: string) {
   let sanitized = text.trim();
 
   sanitized = removeNonSqlCodeBlocks(sanitized);
-
   sanitized = sanitized.replace(/\n{3,}/g, "\n\n").trim();
 
   if (!sanitized) {
-    return "Não foi possível gerar uma resposta segura com base no contexto recuperado.";
+    return "Não foi possível gerar uma resposta segura com base nas fontes do projeto.";
   }
 
   return sanitized;

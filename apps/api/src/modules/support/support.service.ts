@@ -1,17 +1,12 @@
 import { prisma } from "../../lib/prisma.js";
-import { createMcpClient } from "../../lib/mcp-client.js";
 import { LlmService } from "../llm/llm.service.js";
+import { withProjectScopedMcpTools } from "../llm/llm-tool-runtime.js";
 import { sanitizeAssistantOutput } from "../safety/output-policy.js";
 
 type AskQuestionParams = {
   sessionId: string;
   projectId: string;
   question: string;
-};
-
-type MpcTextContent = {
-  type: "text";
-  text: string;
 };
 
 export class SupportService {
@@ -38,67 +33,30 @@ export class SupportService {
       },
     });
 
-    const { client, close } = await createMcpClient();
+    const { answer, toolHistory } = await withProjectScopedMcpTools(
+      { projectId: params.projectId },
+      async (tools) => {
+        return this.llmService.generateSupportAnswerWithTools({
+          question: params.question,
+          tools,
+        });
+      },
+    );
 
-    try {
-      const documentSearch = await client.callTool({
-        name: "search_project_documents",
-        arguments: {
-          projectId: params.projectId,
-          query: params.question,
-        },
-      });
+    const safeAnswer = sanitizeAssistantOutput(answer);
 
-      const gitlabSearch = await client.callTool({
-        name: "search_project_gitlab_files",
-        arguments: {
-          projectId: params.projectId,
-          query: params.question,
-        },
-      });
+    const assistantMessage = await prisma.chatMessage.create({
+      data: {
+        sessionId: session.id,
+        role: "assistant",
+        content: safeAnswer,
+      },
+    });
 
-      const docText = this.extractText(documentSearch.content);
-      const gitlabText = this.extractText(gitlabSearch.content);
-
-      const rawAnswer = await this.llmService.generateSupportAnswer({
-        question: params.question,
-        projectId: params.projectId,
-        documentSearchText: docText,
-        gitlabSearchText: gitlabText,
-      });
-
-      const safeAnswer = sanitizeAssistantOutput(rawAnswer);
-
-      const assistantMessage = await prisma.chatMessage.create({
-        data: {
-          sessionId: session.id,
-          role: "assistant",
-          content: safeAnswer,
-        },
-      });
-
-      return {
-        answer: safeAnswer,
-        assistantMessage,
-      };
-    } finally {
-      await close();
-    }
-  }
-
-  private extractText(content: unknown): string {
-    if (!Array.isArray(content)) return "";
-
-    const textParts = content
-      .filter((item): item is MpcTextContent => {
-        return (
-          !!item &&
-          typeof item === "object" &&
-          (item as MpcTextContent).type === "text"
-        );
-      })
-      .map((item) => item.text);
-
-    return textParts.join("\n").trim();
+    return {
+      answer: safeAnswer,
+      assistantMessage,
+      toolHistory,
+    };
   }
 }
