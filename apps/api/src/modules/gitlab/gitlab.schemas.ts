@@ -1,0 +1,12 @@
+import { z } from "zod";
+
+export const createGitlabIntegrationSchema = z.object({
+  repoUrl: z.string().url("repoUrl inválida"),
+  projectPath: z.string().min(1, "projectPath é obrigatório"),
+  branch: z.string().min(1, "branch é obrigatória"),
+  token: z.string().min(1, "token é obrigatório"),
+});
+
+export type CreateGitlabIntegrationInput = z.infer<
+  typeof createGitlabIntegrationSchema
+>;
