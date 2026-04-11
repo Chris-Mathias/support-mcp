@@ -6,16 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import {
-  searchProjectDocuments,
-  searchProjectDocumentsInputSchema,
-} from "./tools/search-project-documents.js";
-import {
-  getDocumentExcerpt,
-  getDocumentExcerptInputSchema,
-} from "./tools/get-document-excerpt.js";
-import { searchProjectGitlabFiles } from "./tools/search-project-gitlab-files.js";
-import { getGitlabFileExcerpt } from "./tools/get-gitlab-file-excerpt.js";
+import { buildMcpToolList, executeRegisteredTool } from "./tools-registry.js";
 
 const server = new Server(
   {
@@ -31,62 +22,7 @@ const server = new Server(
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [
-      {
-        name: "search_project_documents",
-        description:
-          "Busca documentos PDF de um projeto por texto, sempre filtrando por projectId.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: { type: "string" },
-            query: { type: "string" },
-          },
-          required: ["projectId", "query"],
-        },
-      },
-      {
-        name: "get_document_excerpt",
-        description:
-          "Retorna trecho de um documento específico de um projeto, sempre filtrando por projectId.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: { type: "string" },
-            documentId: { type: "string" },
-            query: { type: "string" },
-          },
-          required: ["projectId", "documentId", "query"],
-        },
-      },
-      {
-        name: "search_project_gitlab_files",
-        description:
-          "Busca arquivos do GitLab associados ao projeto, sempre filtrando por projectId.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: { type: "string" },
-            query: { type: "string" },
-          },
-          required: ["projectId", "query"],
-        },
-      },
-      {
-        name: "get_gitlab_file_excerpt",
-        description:
-          "Retorna trecho de um arquivo GitLab do projeto, sempre filtrando por projectId.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            projectId: { type: "string" },
-            filePath: { type: "string" },
-            query: { type: "string" },
-          },
-          required: ["projectId", "filePath", "query"],
-        },
-      },
-    ],
+    tools: buildMcpToolList(),
   };
 });
 
@@ -94,64 +30,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    switch (name) {
-      case "search_project_documents": {
-        const validated = searchProjectDocumentsInputSchema.parse(args);
-        const result = await searchProjectDocuments(validated);
+    const result = await executeRegisteredTool(name, args);
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_document_excerpt": {
-        const validated = getDocumentExcerptInputSchema.parse(args);
-        const result = await getDocumentExcerpt(validated);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "search_project_gitlab_files": {
-        const result = await searchProjectGitlabFiles(args);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_gitlab_file_excerpt": {
-        const result = await getGitlabFileExcerpt(args);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      default:
-        throw new Error(`Tool not found: ${name}`);
-    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
   } catch (error) {
     return {
       content: [

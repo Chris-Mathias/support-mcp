@@ -9,14 +9,18 @@
   "dependencies": {
     "@tanstack/react-query": "^5.66.11",
     "axios": "^1.8.4",
+    "lucide-react": "^1.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.4.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.2.2",
     "typescript": "^5.8.2",
     "vite": "^6.2.0"
   }

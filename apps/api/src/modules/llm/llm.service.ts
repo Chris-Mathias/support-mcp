@@ -1,28 +1,29 @@
 import OpenAI from "openai";
+import {
+  buildOpenAiToolDefinitions,
+  snakeToCamel,
+} from "@support-mvp/mcp-server/src/tools-registry.js";
 
-type ToolRuntime = {
-  searchProjectDocuments: (args: { query: string }) => Promise<string>;
-  getDocumentExcerpt: (args: {
-    documentId: string;
-    query: string;
-  }) => Promise<string>;
-  searchProjectGitlabFiles: (args: { query: string }) => Promise<string>;
-  getGitlabFileExcerpt: (args: {
-    filePath: string;
-    query: string;
-  }) => Promise<string>;
-};
-
-type ToolName =
-  | "search_project_documents"
-  | "get_document_excerpt"
-  | "search_project_gitlab_files"
-  | "get_gitlab_file_excerpt";
+type RuntimeToolFn = (args?: Record<string, unknown>) => Promise<string>;
+type ToolRuntime = Record<string, RuntimeToolFn>;
 
 type ToolCallRecord = {
-  tool: ToolName;
+  tool: string;
   arguments: Record<string, unknown>;
   resultPreview: string;
+};
+
+type FunctionCallOutputItem = {
+  type: "function_call_output";
+  call_id: string;
+  output: string;
+};
+
+type FunctionCallItem = {
+  type: "function_call";
+  call_id: string;
+  name: string;
+  arguments: string;
 };
 
 export class LlmService {
@@ -46,93 +47,15 @@ export class LlmService {
   }) {
     const toolHistory: ToolCallRecord[] = [];
 
-    const toolDefinitions = [
-      {
-        type: "function" as const,
-        name: "search_project_documents",
-        description:
-          "Busca documentos do projeto por uma consulta textual. Use para procurar termos, módulos, fluxos, mensagens e conceitos.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: {
-              type: "string",
-              description:
-                "Consulta curta e específica para buscar nos documentos do projeto.",
-            },
-          },
-          required: ["query"],
-          additionalProperties: false,
-        },
-        strict: true,
-      },
-      {
-        type: "function" as const,
-        name: "get_document_excerpt",
-        description:
-          "Obtém um trecho de um documento específico do projeto, usando o documentId já descoberto em uma busca anterior.",
-        parameters: {
-          type: "object",
-          properties: {
-            documentId: {
-              type: "string",
-              description:
-                "Identificador do documento retornado em busca anterior.",
-            },
-            query: {
-              type: "string",
-              description:
-                "Termo ou expressão para localizar o trecho mais relevante dentro do documento.",
-            },
-          },
-          required: ["documentId", "query"],
-          additionalProperties: false,
-        },
-        strict: true,
-      },
-      {
-        type: "function" as const,
-        name: "search_project_gitlab_files",
-        description:
-          "Busca arquivos do repositório do projeto por uma consulta textual. Use para procurar serviços, fluxos, tabelas, mensagens, nomes técnicos e SQL.",
-        parameters: {
-          type: "object",
-          properties: {
-            query: {
-              type: "string",
-              description:
-                "Consulta curta e específica para buscar no repositório do projeto.",
-            },
-          },
-          required: ["query"],
-          additionalProperties: false,
-        },
-        strict: true,
-      },
-      {
-        type: "function" as const,
-        name: "get_gitlab_file_excerpt",
-        description:
-          "Obtém um trecho de um arquivo específico do repositório, usando o filePath já descoberto em busca anterior.",
-        parameters: {
-          type: "object",
-          properties: {
-            filePath: {
-              type: "string",
-              description: "Caminho do arquivo retornado em busca anterior.",
-            },
-            query: {
-              type: "string",
-              description:
-                "Termo ou expressão para localizar o trecho mais relevante dentro do arquivo.",
-            },
-          },
-          required: ["filePath", "query"],
-          additionalProperties: false,
-        },
-        strict: true,
-      },
-    ];
+    const toolDefinitions = buildOpenAiToolDefinitions({
+      /**
+       * Quando você remover as tools de documentos da operação,
+       * pode filtrar aqui por onlyNames/excludeNames.
+       *
+       * Exemplo:
+       * excludeNames: ["search_project_documents", "get_document_excerpt"]
+       */
+    });
 
     let response = await this.client.responses.create({
       model: this.model,
@@ -143,17 +66,59 @@ export class LlmService {
             {
               type: "input_text",
               text: [
-                "Você é um assistente técnico para suporte N1.",
-                "Seu trabalho é investigar a pergunta usando as ferramentas disponíveis.",
-                "O projeto já foi fixado pelo sistema; você NÃO escolhe projeto.",
-                "Você decide quais consultas fazer nas ferramentas e pode refinar as queries.",
-                "Faça buscas curtas, específicas e técnicas.",
-                "Use primeiro buscas amplas e depois detalhe com trechos específicos quando necessário.",
-                "Evite consultas redundantes.",
-                "Na resposta final, não exponha código-fonte.",
-                "Só inclua SQL se houver evidência clara e se isso ajudar diretamente o suporte.",
-                "Se a evidência for insuficiente, diga isso explicitamente.",
-                "Responda em português do Brasil.",
+                [
+                  "Você é um Assistente Técnico dedicado a apoiar a equipe de suporte de nível 1.",
+                  "Seu objetivo é investigar as dúvidas do atendente usando as ferramentas disponíveis.",
+                  "Você deve traduzir a complexidade técnica do sistema em respostas operacionais ou de negócio claras.",
+                  "",
+                  "CONTEXTO DO USUÁRIO:",
+                  "O Atendente N1 e o Cliente não possuem acesso a repositórios, códigos-fonte, scripts ou documentações.",
+                  "Você funciona como os 'olhos' deles no sistema.",
+                  "Nunca sugira que o atendente ou o cliente abram, leiam ou verifiquem arquivos.",
+                  "Você é o responsável por ler, entender e explicar o conteúdo.",
+                  "",
+                  "REGRAS DE INVESTIGAÇÃO E LEITURA:",
+                  "Não deduza o comportamento de um sistema ou arquivo baseando-se apenas em seu título, nome ou diretório.",
+                  "Priorize localizar os arquivos relevantes e ler o conteúdo antes de concluir qualquer explicação.",
+                  "Para perguntas amplas sobre estrutura do projeto, comece entendendo a organização do repositório.",
+                  "Para localizar implementações, mensagens, regras ou fluxos, priorize ferramentas de busca no código antes de ler arquivos.",
+                  "Prefira ler trechos localizados de arquivos antes de ler arquivos completos.",
+                  "Só use leitura integral quando o trecho localizado não for suficiente.",
+                  "Se as informações no código forem escassas ou incompletas, não preencha as lacunas com suposições.",
+                  "Caso falte contexto, declare explicitamente: 'Não há informações detalhadas suficientes no código para confirmar como isso funciona.'",
+                  "",
+                  "DIRETRIZES DE COMUNICAÇÃO E RESTRIÇÕES:",
+                  "Responda exclusivamente com base no conteúdo textual que você conseguiu ler nas ferramentas.",
+                  "Traduza os processos técnicos para uma linguagem de negócios simples.",
+                  "Exemplo: em vez de dizer 'o script lê o arquivo dados.txt', diga 'o sistema processa os dados enviados pelo cliente'.",
+                  "É expressamente proibido expor código-fonte na resposta.",
+                  "Não mencione nomes de funções, variáveis, lógicas de programação ou tipos de dados.",
+                  "Não invente nomes de departamentos. Quando necessário, refira-se apenas à 'Equipe de Desenvolvimento'.",
+                  "",
+                  "DIRETRIZES DE ESCALONAMENTO:",
+                  "Para problemas operacionais ou erros do usuário: explique a regra de negócio de forma simples.",
+                  "O objetivo é que o N1 possa orientar o cliente. Não sugira escalonamento nesses casos.",
+                  "Unicamente para problemas no código (bugs): oriente o escalonamento para a 'Equipe de Desenvolvimento'.",
+                  "Faça isso apenas se identificar um erro real na lógica ou comportamento do sistema com base no conteúdo lido.",
+                  "Se houver um bug, não sugira como a equipe de desenvolvimento deve resolvê-lo.",
+                  "Não crie requisitos técnicos; apenas aponte onde o sistema está falhando.",
+                  "",
+                  "USO DAS FERRAMENTAS:",
+                  "Use as ferramentas de forma progressiva.",
+                  "Para perguntas amplas sobre o projeto, estrutura ou arquitetura: comece por visão geral/listagem.",
+                  "Para localizar implementação de uma regra, erro, mensagem ou fluxo: comece por busca textual no repositório.",
+                  "Depois de localizar um arquivo relevante: prefira ler um trecho específico.",
+                  "Use leitura do arquivo completo apenas como último recurso.",
+                  "",
+                  "FORMATO DA RESPOSTA:",
+                  "Seja direto, profissional e sucinto. Priorize respostas curtas e diretas. Responda em português do Brasil (PT-BR).",
+                  "Envie a resposta em markdown, com formatação clara e organizada. Não use emojis.",
+                  "Em caso de erro no sistema, estruture sua resposta final obrigatoriamente nestes dois tópicos, voltados para o Atendente:",
+                  "1. Causa raiz: o motivo do problema ou a resposta direta à dúvida levantada.",
+                  "2. Resolução: a orientação exata do que dizer ao cliente.",
+                  "Em caso de dúvida operacional do cliente, responda diretamente com a explicação da regra de negócio ou processo, sem utilizar os três tópicos.",
+                  "Em caso de bug confirmado, inclua a recomendação para escalar para a Equipe de Desenvolvimento.",
+                ],
               ].join(" "),
             },
           ],
@@ -163,7 +128,7 @@ export class LlmService {
           content: [
             {
               type: "input_text",
-              text: `Pergunta do atendente: ${params.question}`,
+              text: `Pergunta: ${params.question}`,
             },
           ],
         },
@@ -173,14 +138,7 @@ export class LlmService {
 
     for (let step = 0; step < 6; step++) {
       const functionCalls = response.output.filter(
-        (
-          item,
-        ): item is {
-          type: "function_call";
-          call_id: string;
-          name: ToolName;
-          arguments: string;
-        } => item.type === "function_call",
+        (item): item is FunctionCallItem => item.type === "function_call",
       );
 
       if (functionCalls.length === 0) {
@@ -190,30 +148,25 @@ export class LlmService {
         };
       }
 
-      const toolOutputs: Array<{
-        type: "function_call_output";
-        call_id: string;
-        output: string;
-      }> = [];
+      const toolOutputs: FunctionCallOutputItem[] = [];
 
       for (const call of functionCalls) {
         const parsedArgs = safeJsonParse(call.arguments);
+
         console.log(`\n[Passo ${step}] LLM chamou a ferramenta: ${call.name}`);
         console.log(`[Passo ${step}] Argumentos enviados:`, parsedArgs);
-        const output = await this.executeTool(
-          params.tools,
-          call.name,
-          parsedArgs,
-        );
+
+        const output = await this.executeTool(params.tools, call.name, parsedArgs);
+
         console.log(
           `[Passo ${step}] Resposta da ferramenta (preview):`,
-          output.slice(0, 150),
+          output.slice(0, 300),
         );
 
         toolHistory.push({
           tool: call.name,
           arguments: parsedArgs,
-          resultPreview: output.slice(0, 500),
+          resultPreview: output.slice(0, 1000),
         });
 
         toolOutputs.push({
@@ -231,51 +184,70 @@ export class LlmService {
       });
     }
 
+    const pendingCalls = response.output.filter(
+      (item): item is FunctionCallItem => item.type === "function_call",
+    );
+
+    if (pendingCalls.length === 0) {
+      return {
+        answer: response.output_text.trim(),
+        toolHistory,
+      };
+    }
+
+    const fallbackOutputs: FunctionCallOutputItem[] = pendingCalls.map((call) => ({
+      type: "function_call_output",
+      call_id: call.call_id,
+      output:
+        "SYSTEM_WARNING: Limite máximo de uso de ferramentas atingido. A ferramenta não foi executada. Interrompa a investigação e formule a resposta final baseando-se estritamente nas informações coletadas até agora.",
+    }));
+
+    const finalResponse = await this.client.responses.create({
+      model: this.model,
+      previous_response_id: response.id,
+      input: fallbackOutputs,
+    });
+
     return {
-      answer:
-        "Não foi possível concluir a investigação com segurança dentro do limite de consultas.",
+      answer: finalResponse.output_text.trim(),
       toolHistory,
     };
   }
 
   private async executeTool(
     tools: ToolRuntime,
-    toolName: ToolName,
+    toolName: string,
     args: Record<string, unknown>,
-  ) {
-    switch (toolName) {
-      case "search_project_documents":
-        return tools.searchProjectDocuments({
-          query: String(args.query || ""),
-        });
-
-      case "get_document_excerpt":
-        return tools.getDocumentExcerpt({
-          documentId: String(args.documentId || ""),
-          query: String(args.query || ""),
-        });
-
-      case "search_project_gitlab_files":
-        return tools.searchProjectGitlabFiles({
-          query: String(args.query || ""),
-        });
-
-      case "get_gitlab_file_excerpt":
-        return tools.getGitlabFileExcerpt({
-          filePath: String(args.filePath || ""),
-          query: String(args.query || ""),
-        });
-
-      default:
-        throw new Error(`Tool não suportada: ${toolName satisfies never}`);
+  ): Promise<string> {
+    /**
+     * Primeiro tenta pelo nome MCP direto.
+     * Ex.: tools["search_project_gitlab_files"]
+     */
+    const directTool = tools[toolName];
+    if (directTool) {
+      return directTool(args);
     }
+
+    /**
+     * Compatibilidade com runtime camelCase.
+     * Ex.: search_project_gitlab_files -> searchProjectGitlabFiles
+     */
+    const runtimeName = snakeToCamel(toolName);
+    const camelTool = tools[runtimeName];
+    if (camelTool) {
+      return camelTool(args);
+    }
+
+    throw new Error(`Tool não suportada no runtime: ${toolName}`);
   }
 }
 
 function safeJsonParse(value: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
   } catch {
     return {};
   }

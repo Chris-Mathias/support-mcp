@@ -1,111 +1,89 @@
 import { createMcpClient } from "../../lib/mcp-client.js";
+import {
+  buildProjectScopedRuntime,
+  buildProjectScopedRuntimeByToolName,
+} from "@support-mvp/mcp-server/src/tools-registry.js";
 
 type RuntimeContext = {
   projectId: string;
 };
 
-type TextContent = {
-  type: "text";
-  text: string;
-};
+export type ProjectScopedRuntimeTools = Record<
+  string,
+  (args?: Record<string, unknown>) => Promise<string>
+>;
 
-function extractMcpText(content: unknown): string {
-  if (!Array.isArray(content)) return "";
-
-  return content
-    .filter((item): item is TextContent => {
-      return (
-        !!item &&
-        typeof item === "object" &&
-        (item as TextContent).type === "text"
-      );
-    })
-    .map((item) => item.text)
-    .join("\n")
-    .trim();
-}
-
+/**
+ * Cria um runtime de tools MCP com projectId injetado automaticamente
+ * e expõe as tools usando runtimeName (camelCase).
+ *
+ * Exemplo de chaves geradas:
+ * - searchProjectDocuments
+ * - getDocumentExcerpt
+ * - listProjectGitlabFiles
+ * - searchProjectGitlabFiles
+ * - getGitlabFileExcerpt
+ * - readFullGitlabFile
+ * - getProjectReadme
+ *
+ * Este formato é útil para manter compatibilidade com o LlmService atual.
+ */
 export async function withProjectScopedMcpTools<T>(
   context: RuntimeContext,
-  fn: (tools: {
-    searchProjectDocuments: (args: { query: string }) => Promise<string>;
-    getDocumentExcerpt: (args: {
-      documentId: string;
-      query: string;
-    }) => Promise<string>;
-    searchProjectGitlabFiles: (args: { query: string }) => Promise<string>;
-    getGitlabFileExcerpt: (args: {
-      filePath: string;
-      query: string;
-    }) => Promise<string>;
-  }) => Promise<T>,
-) {
+  fn: (tools: ProjectScopedRuntimeTools) => Promise<T>,
+  options?: {
+    onlyNames?: string[];
+    excludeNames?: string[];
+  },
+): Promise<T> {
   const { client, close } = await createMcpClient();
 
   try {
-    const tools = {
-      searchProjectDocuments: async ({ query }: { query: string }) => {
-        const result = await client.callTool({
-          name: "search_project_documents",
-          arguments: {
-            projectId: context.projectId,
-            query,
-          },
-        });
+    const tools = buildProjectScopedRuntime({
+      client,
+      projectId: context.projectId,
+      onlyNames: options?.onlyNames,
+      excludeNames: options?.excludeNames,
+    });
 
-        return extractMcpText(result.content);
-      },
+    return await fn(tools);
+  } finally {
+    await close();
+  }
+}
 
-      getDocumentExcerpt: async ({
-        documentId,
-        query,
-      }: {
-        documentId: string;
-        query: string;
-      }) => {
-        const result = await client.callTool({
-          name: "get_document_excerpt",
-          arguments: {
-            projectId: context.projectId,
-            documentId,
-            query,
-          },
-        });
+/**
+ * Variante alternativa que expõe as tools pelos nomes MCP originais.
+ *
+ * Exemplo de chaves geradas:
+ * - search_project_documents
+ * - get_document_excerpt
+ * - list_project_gitlab_files
+ * - search_project_gitlab_files
+ * - get_gitlab_file_excerpt
+ * - read_full_gitlab_file
+ * - get_project_readme
+ *
+ * Esta versão tende a simplificar integrações futuras, porque elimina
+ * a necessidade de mapear snake_case <-> camelCase.
+ */
+export async function withProjectScopedMcpToolsByName<T>(
+  context: RuntimeContext,
+  fn: (tools: ProjectScopedRuntimeTools) => Promise<T>,
+  options?: {
+    onlyNames?: string[];
+    excludeNames?: string[];
+  },
+): Promise<T> {
+  const { client, close } = await createMcpClient();
 
-        return extractMcpText(result.content);
-      },
-
-      searchProjectGitlabFiles: async ({ query }: { query: string }) => {
-        const result = await client.callTool({
-          name: "search_project_gitlab_files",
-          arguments: {
-            projectId: context.projectId,
-            query,
-          },
-        });
-
-        return extractMcpText(result.content);
-      },
-
-      getGitlabFileExcerpt: async ({
-        filePath,
-        query,
-      }: {
-        filePath: string;
-        query: string;
-      }) => {
-        const result = await client.callTool({
-          name: "get_gitlab_file_excerpt",
-          arguments: {
-            projectId: context.projectId,
-            filePath,
-            query,
-          },
-        });
-
-        return extractMcpText(result.content);
-      },
-    };
+  try {
+    const tools = buildProjectScopedRuntimeByToolName({
+      client,
+      projectId: context.projectId,
+      onlyNames: options?.onlyNames,
+      excludeNames: options?.excludeNames,
+    });
 
     return await fn(tools);
   } finally {

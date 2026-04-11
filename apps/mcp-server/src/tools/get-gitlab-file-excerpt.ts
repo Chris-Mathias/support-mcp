@@ -3,7 +3,7 @@ import axios from "axios";
 import { prisma } from "../lib/prisma.js";
 import { buildExcerpt } from "../lib/excerpt.js";
 
-const inputSchema = z.object({
+export const getGitlabFileExcerptInputSchema = z.object({
   projectId: z.string().min(1),
   filePath: z.string().min(1),
   query: z.string().min(1),
@@ -14,7 +14,8 @@ function encodeProjectPath(projectPath: string) {
 }
 
 export async function getGitlabFileExcerpt(input: unknown) {
-  const { projectId, filePath, query } = inputSchema.parse(input);
+  const { projectId, filePath, query } =
+    getGitlabFileExcerptInputSchema.parse(input);
 
   const integration = await prisma.gitlabIntegration.findFirst({
     where: { projectId },
@@ -44,9 +45,12 @@ export async function getGitlabFileExcerpt(input: unknown) {
     "base64",
   ).toString("utf-8");
 
+  const excerpt = buildExcerpt(decodedContent, query, 300);
+
   return {
     projectId,
     filePath,
-    excerpt: buildExcerpt(decodedContent, query),
+    query,
+    excerpt,
   };
 }
