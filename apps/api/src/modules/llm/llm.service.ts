@@ -1,3 +1,6 @@
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
 import OpenAI from "openai";
 import {
   buildOpenAiToolDefinitions,
@@ -26,6 +29,16 @@ type FunctionCallItem = {
   arguments: string;
 };
 
+type ChatMessageInput = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const promptPath = path.resolve(__dirname, "prompt.txt");
+const systemPrompt: string = fs.readFileSync(promptPath, "utf-8");
+
 export class LlmService {
   private client: OpenAI;
   private model: string;
@@ -42,96 +55,21 @@ export class LlmService {
   }
 
   async generateSupportAnswerWithTools(params: {
-    question: string;
+    messages: ChatMessageInput[];
     tools: ToolRuntime;
   }) {
     const toolHistory: ToolCallRecord[] = [];
 
-    const toolDefinitions = buildOpenAiToolDefinitions({
-      /**
-       * Quando você remover as tools de documentos da operação,
-       * pode filtrar aqui por onlyNames/excludeNames.
-       *
-       * Exemplo:
-       * excludeNames: ["search_project_documents", "get_document_excerpt"]
-       */
-    });
+    const toolDefinitions = buildOpenAiToolDefinitions({});
 
     let response = await this.client.responses.create({
       model: this.model,
       input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: [
-                [
-                  "Você é um Assistente Técnico dedicado a apoiar a equipe de suporte de nível 1.",
-                  "Seu objetivo é investigar as dúvidas do atendente usando as ferramentas disponíveis.",
-                  "Você deve traduzir a complexidade técnica do sistema em respostas operacionais ou de negócio claras.",
-                  "",
-                  "CONTEXTO DO USUÁRIO:",
-                  "O Atendente N1 e o Cliente não possuem acesso a repositórios, códigos-fonte, scripts ou documentações.",
-                  "Você funciona como os 'olhos' deles no sistema.",
-                  "Nunca sugira que o atendente ou o cliente abram, leiam ou verifiquem arquivos.",
-                  "Você é o responsável por ler, entender e explicar o conteúdo.",
-                  "",
-                  "REGRAS DE INVESTIGAÇÃO E LEITURA:",
-                  "Não deduza o comportamento de um sistema ou arquivo baseando-se apenas em seu título, nome ou diretório.",
-                  "Priorize localizar os arquivos relevantes e ler o conteúdo antes de concluir qualquer explicação.",
-                  "Para perguntas amplas sobre estrutura do projeto, comece entendendo a organização do repositório.",
-                  "Para localizar implementações, mensagens, regras ou fluxos, priorize ferramentas de busca no código antes de ler arquivos.",
-                  "Prefira ler trechos localizados de arquivos antes de ler arquivos completos.",
-                  "Só use leitura integral quando o trecho localizado não for suficiente.",
-                  "Se as informações no código forem escassas ou incompletas, não preencha as lacunas com suposições.",
-                  "Caso falte contexto, declare explicitamente: 'Não há informações detalhadas suficientes no código para confirmar como isso funciona.'",
-                  "",
-                  "DIRETRIZES DE COMUNICAÇÃO E RESTRIÇÕES:",
-                  "Responda exclusivamente com base no conteúdo textual que você conseguiu ler nas ferramentas.",
-                  "Traduza os processos técnicos para uma linguagem de negócios simples.",
-                  "Exemplo: em vez de dizer 'o script lê o arquivo dados.txt', diga 'o sistema processa os dados enviados pelo cliente'.",
-                  "É expressamente proibido expor código-fonte na resposta.",
-                  "Não mencione nomes de funções, variáveis, lógicas de programação ou tipos de dados.",
-                  "Não invente nomes de departamentos. Quando necessário, refira-se apenas à 'Equipe de Desenvolvimento'.",
-                  "",
-                  "DIRETRIZES DE ESCALONAMENTO:",
-                  "Para problemas operacionais ou erros do usuário: explique a regra de negócio de forma simples.",
-                  "O objetivo é que o N1 possa orientar o cliente. Não sugira escalonamento nesses casos.",
-                  "Unicamente para problemas no código (bugs): oriente o escalonamento para a 'Equipe de Desenvolvimento'.",
-                  "Faça isso apenas se identificar um erro real na lógica ou comportamento do sistema com base no conteúdo lido.",
-                  "Se houver um bug, não sugira como a equipe de desenvolvimento deve resolvê-lo.",
-                  "Não crie requisitos técnicos; apenas aponte onde o sistema está falhando.",
-                  "",
-                  "USO DAS FERRAMENTAS:",
-                  "Use as ferramentas de forma progressiva.",
-                  "Para perguntas amplas sobre o projeto, estrutura ou arquitetura: comece por visão geral/listagem.",
-                  "Para localizar implementação de uma regra, erro, mensagem ou fluxo: comece por busca textual no repositório.",
-                  "Depois de localizar um arquivo relevante: prefira ler um trecho específico.",
-                  "Use leitura do arquivo completo apenas como último recurso.",
-                  "",
-                  "FORMATO DA RESPOSTA:",
-                  "Seja direto, profissional e sucinto. Priorize respostas curtas e diretas. Responda em português do Brasil (PT-BR).",
-                  "Envie a resposta em markdown, com formatação clara e organizada. Não use emojis.",
-                  "Em caso de erro no sistema, estruture sua resposta final obrigatoriamente nestes dois tópicos, voltados para o Atendente:",
-                  "1. Causa raiz: o motivo do problema ou a resposta direta à dúvida levantada.",
-                  "2. Resolução: a orientação exata do que dizer ao cliente.",
-                  "Em caso de dúvida operacional do cliente, responda diretamente com a explicação da regra de negócio ou processo, sem utilizar os três tópicos.",
-                  "Em caso de bug confirmado, inclua a recomendação para escalar para a Equipe de Desenvolvimento.",
-                ],
-              ].join(" "),
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `Pergunta: ${params.question}`,
-            },
-          ],
-        },
+        { role: "system", content: systemPrompt },
+        ...params.messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
       ],
       tools: toolDefinitions,
     });
@@ -156,7 +94,11 @@ export class LlmService {
         console.log(`\n[Passo ${step}] LLM chamou a ferramenta: ${call.name}`);
         console.log(`[Passo ${step}] Argumentos enviados:`, parsedArgs);
 
-        const output = await this.executeTool(params.tools, call.name, parsedArgs);
+        const output = await this.executeTool(
+          params.tools,
+          call.name,
+          parsedArgs,
+        );
 
         console.log(
           `[Passo ${step}] Resposta da ferramenta (preview):`,
@@ -195,12 +137,14 @@ export class LlmService {
       };
     }
 
-    const fallbackOutputs: FunctionCallOutputItem[] = pendingCalls.map((call) => ({
-      type: "function_call_output",
-      call_id: call.call_id,
-      output:
-        "SYSTEM_WARNING: Limite máximo de uso de ferramentas atingido. A ferramenta não foi executada. Interrompa a investigação e formule a resposta final baseando-se estritamente nas informações coletadas até agora.",
-    }));
+    const fallbackOutputs: FunctionCallOutputItem[] = pendingCalls.map(
+      (call) => ({
+        type: "function_call_output",
+        call_id: call.call_id,
+        output:
+          "SYSTEM_WARNING: Limite máximo de uso de ferramentas atingido. A ferramenta não foi executada. Interrompa a investigação e formule a resposta final baseando-se estritamente nas informações coletadas até agora.",
+      }),
+    );
 
     const finalResponse = await this.client.responses.create({
       model: this.model,

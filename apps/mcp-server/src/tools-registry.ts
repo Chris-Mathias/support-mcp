@@ -3,47 +3,60 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 /**
- * =========================
- * IMPORTS DAS TOOLS ATUAIS
- * =========================
- *
- * Ajuste os paths se necessário.
+ * =================
+ * IMPORTS DAS TOOLS
+ * =================
  */
 
 import {
-  searchProjectDocuments,
-  searchProjectDocumentsInputSchema,
-} from "./tools/search-project-documents.js";
+  getRepositoryOverview,
+  getRepositoryOverviewInputSchema,
+} from "./tools/repository/get-repository-overview.js";
 
 import {
-  getDocumentExcerpt,
-  getDocumentExcerptInputSchema,
-} from "./tools/get-document-excerpt.js";
+  listRepositoryTree,
+  listRepositoryTreeInputSchema,
+} from "./tools/repository/list-repository-tree.js";
 
 import {
-  listProjectGitlabFiles,
-  listProjectGitlabFilesInputSchema,
-} from "./tools/list-project-gitlab-files.js";
+  searchRepositoryContent,
+  searchRepositoryContentInputSchema,
+} from "./tools/repository/search-repository-content.js";
 
 import {
-  searchProjectGitlabFiles,
-  searchProjectGitlabFilesInputSchema,
-} from "./tools/search-project-gitlab-files.js";
+  readFileExcerpt,
+  readFileExcerptInputSchema,
+} from "./tools/repository/read-file-excerpt.js";
 
 import {
-  getGitlabFileExcerpt,
-  getGitlabFileExcerptInputSchema,
-} from "./tools/get-gitlab-file-excerpt.js";
+  readFullFile,
+  readFullFileInputSchema,
+} from "./tools/repository/read-full-file.js";
 
 import {
-  readFullGitlabFile,
-  readFullGitlabFileInputSchema,
-} from "./tools/read-full-gitlab-file.js";
+  getDocumentOverview,
+  getDocumentOverviewInputSchema,
+} from "./tools/documents/get-document-overview.js";
 
 import {
-  getProjectReadme,
-  getProjectReadmeInputSchema,
-} from "./tools/get-project-readme.js";
+  listProjectDocuments,
+  listProjectDocumentsInputSchema,
+} from "./tools/documents/list-project-documents.js";
+
+import {
+  searchDocumentContent,
+  searchDocumentContentInputSchema,
+} from "./tools/documents/search-document-content.js";
+
+import {
+  readDocumentExcerpt,
+  readDocumentExcerptInputSchema,
+} from "./tools/documents/read-document-excerpt.js";
+
+import {
+  readFullDocument,
+  readFullDocumentInputSchema,
+} from "./tools/documents/read-full-document.js";
 
 /**
  * =========================
@@ -154,100 +167,180 @@ export function defineTool<
  */
 
 export const toolRegistry = [
+  /**
+   * Tools para pesquisa e leitura de repositórios de código no Gitlab
+   */
   defineTool({
-    name: "search_project_documents",
+    name: "get_repository_overview",
     description:
-      "Pesquisa por texto no conteúdo dos documentos do projeto. Use para descobrir quais documentos falam sobre um assunto, fluxo, regra ou mensagem.",
+      "Retorna um panorama estrutural do repositório GitLab, incluindo README da raiz, linguagens predominantes, diretórios centrais, arquivos importantes, possíveis entrypoints e sinais arquiteturais.",
     llmDescription:
-      "Use para localizar documentos relevantes por assunto. Chame esta tool antes de tentar ler trechos específicos de um documento.",
-    inputSchema: searchProjectDocumentsInputSchema,
-    llmInputSchema: z.object({
-      query: z.string().min(1),
-    }),
+      "Use no início de uma investigação para entender a estrutura do sistema e identificar onde procurar. Esta é a tool padrão para obter contexto inicial do repositório. Não use para localizar implementações específicas, mensagens de erro ou trechos de código; para isso, prefira a tool de busca no repositório.",
+    inputSchema: getRepositoryOverviewInputSchema,
+    llmInputSchema: z.object({}),
     projectScoped: true,
-    handler: searchProjectDocuments,
+    handler: getRepositoryOverview,
   }),
 
   defineTool({
-    name: "get_document_excerpt",
+    name: "list_repository_tree",
     description:
-      "Extrai o trecho mais relevante de um documento específico onde o termo pesquisado aparece. Use após encontrar um documento relevante em uma busca anterior.",
+      "Lista arquivos e diretórios do repositório GitLab de forma estrutural, com suporte a caminho e profundidade para navegação de subárvores.",
     llmDescription:
-      "Use somente depois de já conhecer o documentId. Esta é a forma preferencial de leitura localizada em documentos; evite ler conteúdo amplo sem necessidade.",
-    inputSchema: getDocumentExcerptInputSchema,
+      "Use para navegar na estrutura do repositório ou de um diretório específico quando for necessário entender a organização dos módulos. Sempre informe path, depth, includeFiles e includeDirectories. Use path vazio para a raiz. Não use para localizar strings, implementações ou mensagens de erro; nesses casos, use a tool de busca no repositório.",
+    inputSchema: listRepositoryTreeInputSchema,
+    llmInputSchema: z.object({
+      path: z.string().trim(),
+      depth: z.number().int().min(1).max(5),
+      includeFiles: z.boolean(),
+      includeDirectories: z.boolean(),
+    }),
+    projectScoped: true,
+    handler: listRepositoryTree,
+  }),
+
+  defineTool({
+    name: "search_repository_content",
+    description:
+      "Busca conteúdo textual no repositório GitLab para localizar implementações, símbolos, mensagens de erro, endpoints, configurações e strings relevantes.",
+    llmDescription:
+      "Use para localizar rapidamente onde um comportamento, erro, símbolo, endpoint, tabela, configuração ou texto aparece no repositório. Sempre informe query, pathPrefix, fileGlobs e maxResults. Use string vazia em pathPrefix quando quiser buscar no repositório inteiro e use array vazio em fileGlobs quando não quiser filtrar por padrão de arquivo. Após encontrar resultados promissores, prefira ler trechos com a tool de excerpt.",
+    inputSchema: searchRepositoryContentInputSchema,
+    llmInputSchema: z.object({
+      query: z.string().min(1),
+      pathPrefix: z.string(),
+      fileGlobs: z.array(z.string()),
+      maxResults: z.number().int().min(1).max(20),
+    }),
+    projectScoped: true,
+    handler: searchRepositoryContent,
+  }),
+
+  defineTool({
+    name: "read_file_excerpt",
+    description:
+      "Lê um trecho específico de um arquivo do repositório GitLab, por faixa de linhas, linha âncora ou primeira ocorrência de uma query.",
+    llmDescription:
+      "Use como forma padrão de inspeção de código, configuração ou documentação após localizar um arquivo relevante. Prefira esta tool em vez de ler o arquivo inteiro. Sempre informe filePath, query, startLine, endLine, anchorLine, before e after. Use query vazia quando não quiser buscar por texto. Use 0 em startLine, endLine e anchorLine quando não quiser usar esses modos.",
+    inputSchema: readFileExcerptInputSchema,
+    llmInputSchema: z.object({
+      filePath: z.string().min(1),
+      query: z.string(),
+      startLine: z.number().int().min(0),
+      endLine: z.number().int().min(0),
+      anchorLine: z.number().int().min(0),
+      before: z.number().int().min(0).max(200),
+      after: z.number().int().min(0).max(200),
+    }),
+    projectScoped: true,
+    handler: readFileExcerpt,
+  }),
+
+  defineTool({
+    name: "read_full_file",
+    description:
+      "Lê o conteúdo completo de um arquivo do repositório GitLab e retorna também metadados úteis, como tamanho, quantidade de linhas e tipo estimado do arquivo.",
+    llmDescription:
+      "Use apenas quando o conteúdo integral do arquivo for realmente necessário para entender configuração, documentação curta, migration, script ou arquivo pequeno. Não use como forma padrão de inspeção de código; prefira read_file_excerpt para leitura localizada.",
+    inputSchema: readFullFileInputSchema,
+    llmInputSchema: z.object({
+      filePath: z.string().min(1),
+    }),
+    projectScoped: true,
+    handler: readFullFile,
+  }),
+
+  /**
+   * Tools para pesquisa e leitura de documentos do projeto (arquivos PDF)
+   */
+  defineTool({
+    name: "get_document_overview",
+    description:
+      "Retorna uma visão geral de um documento do projeto, incluindo metadados, status de processamento, resumo, tipo estimado do documento, palavras-chave, seções detectadas e prévias iniciais de chunks.",
+    llmDescription:
+      "Use após identificar um documento relevante para entender rapidamente o que ele contém e como navegar nele. Esta é a tool padrão para inspeção inicial de um documento específico antes de buscar termos internos ou abrir trechos mais direcionados. Sempre informe documentId, includeChunkPreviews e maxChunkPreviews. Use true em includeChunkPreviews quando quiser ver uma amostra dos primeiros trechos. Não use esta tool para localizar ocorrências específicas de erros, strings, procedimentos ou termos internos; para isso, prefira a tool de busca de conteúdo documental.",
+    inputSchema: getDocumentOverviewInputSchema,
     llmInputSchema: z.object({
       documentId: z.string().min(1),
-      query: z.string().min(1),
+      includeChunkPreviews: z.boolean(),
+      maxChunkPreviews: z.number().int().min(1).max(10),
     }),
     projectScoped: true,
-    handler: getDocumentExcerpt,
+    handler: getDocumentOverview,
   }),
 
   defineTool({
-    name: "list_project_gitlab_files",
+    name: "list_project_documents",
     description:
-      "Lista caminhos de arquivos do repositório GitLab. Use para entender a estrutura de pastas, mapear módulos ou localizar arquivos por nome/caminho.",
+      "Lista os documentos do projeto já ingeridos pelo sistema, retornando metadados úteis para navegação, como nome do arquivo, status de processamento, quantidade de chunks, número de páginas, resumo curto e datas de criação e atualização.",
     llmDescription:
-      "Use primeiro em perguntas amplas sobre estrutura do projeto, arquitetura ou organização do repositório. Também use quando a busca textual não for suficiente para orientar a navegação.",
-    inputSchema: listProjectGitlabFilesInputSchema,
-    llmInputSchema: z.object({}),
+      "Use no início da investigação documental para descobrir quais PDFs e documentos estão disponíveis no projeto e quais estão prontos para uso. Esta é a tool padrão para obter contexto inicial dos documentos antes de abrir um documento específico ou buscar conteúdo textual. Prefira documentos com isUsable igual a true. Sempre informe status, onlyReady, fileNameContains, limit e orderBy. Use null em status quando não quiser filtrar por estado. Use false em onlyReady quando quiser listar tudo. Use string vazia em fileNameContains quando não quiser filtrar por nome. Não use esta tool para localizar termos, erros, procedimentos ou trechos internos do documento; para isso, prefira a tool de busca de conteúdo documental.",
+    inputSchema: listProjectDocumentsInputSchema,
+    llmInputSchema: z.object({
+      status: z
+        .enum(["PENDING", "PROCESSING", "READY", "FAILED", "UNSUPPORTED"])
+        .nullable(),
+      onlyReady: z.boolean(),
+      fileNameContains: z.string(),
+      limit: z.number().int().min(1).max(100),
+      orderBy: z.enum([
+        "createdAt_desc",
+        "createdAt_asc",
+        "fileName_asc",
+        "fileName_desc",
+      ]),
+    }),
     projectScoped: true,
-    handler: listProjectGitlabFiles,
+    handler: listProjectDocuments,
   }),
 
   defineTool({
-    name: "search_project_gitlab_files",
+    name: "search_document_content",
     description:
-      "Pesquisa por um termo dentro do repositório GitLab. Use para localizar onde uma lógica, erro, endpoint, SQL, configuração, serviço ou regra está implementado.",
+      "Busca conteúdo textual nos chunks dos documentos do projeto para localizar termos, erros, procedimentos, mensagens, conceitos funcionais e trechos relevantes.",
     llmDescription:
-      "Ferramenta principal para localizar implementação no repositório. Prefira esta tool antes de ler arquivos. Use para procurar nomes técnicos, mensagens, tabelas, endpoints, serviços e regras.",
-    inputSchema: searchProjectGitlabFilesInputSchema,
+      "Use para localizar rapidamente em quais documentos e trechos um termo, erro, procedimento, configuração funcional ou conceito aparece. Esta é a tool padrão para busca textual documental. Sempre informe query, documentId e limit. Use null em documentId quando quiser buscar em todos os documentos do projeto. Após encontrar resultados promissores, prefira abrir trechos específicos com read_document_excerpt em vez de ler o documento inteiro.",
+    inputSchema: searchDocumentContentInputSchema,
     llmInputSchema: z.object({
       query: z.string().min(1),
+      documentId: z.string().min(1).nullable(),
+      limit: z.number().int().min(1).max(20),
     }),
     projectScoped: true,
-    handler: searchProjectGitlabFiles,
+    handler: searchDocumentContent,
   }),
 
   defineTool({
-    name: "get_gitlab_file_excerpt",
+    name: "read_document_excerpt",
     description:
-      "Obtém um trecho relevante de um arquivo específico do GitLab a partir de um termo pesquisado. Use após identificar o arquivo via busca ou navegação.",
+      "Lê um trecho localizado de um documento do projeto, usando como âncora um chunk específico, um índice de chunk ou a primeira ocorrência relevante de uma query, com suporte a expansão por chunks vizinhos.",
     llmDescription:
-      "Ferramenta principal de leitura localizada em código. Prefira esta tool em vez de ler o arquivo completo. Use depois de search_project_gitlab_files ou list_project_gitlab_files.",
-    inputSchema: getGitlabFileExcerptInputSchema,
+      "Use como forma padrão de inspeção documental após identificar um documento ou um resultado promissor de busca. Prefira esta tool em vez de ler o documento inteiro. Sempre informe documentId, chunkId, chunkIndex, query, before e after. Use null em chunkId quando não quiser ancorar por id. Use null em chunkIndex quando não quiser ancorar por índice. Use string vazia em query quando não quiser buscar por texto. Use 0 em before e after quando não quiser expandir para chunks vizinhos. A prioridade de resolução é chunkId, depois chunkIndex, depois query; se nada for informado, a tool retorna o início do documento.",
+    inputSchema: readDocumentExcerptInputSchema,
     llmInputSchema: z.object({
-      filePath: z.string().min(1),
-      query: z.string().min(1),
+      documentId: z.string().min(1),
+      chunkId: z.string().min(1).nullable(),
+      chunkIndex: z.number().int().min(0).nullable(),
+      query: z.string(),
+      before: z.number().int().min(0).max(10),
+      after: z.number().int().min(0).max(10),
     }),
     projectScoped: true,
-    handler: getGitlabFileExcerpt,
+    handler: readDocumentExcerpt,
   }),
 
   defineTool({
-    name: "read_full_gitlab_file",
+    name: "read_full_document",
     description:
-      "Lê o conteúdo integral de um arquivo do repositório GitLab. Use apenas quando o arquivo completo for realmente necessário.",
+      "Lê o conteúdo integral extraído de um documento do projeto e retorna também metadados úteis, como status de processamento, tamanho, quantidade de chunks e número de páginas.",
     llmDescription:
-      "Use apenas como último recurso, quando trechos localizados não forem suficientes ou quando o arquivo for pequeno e a visão completa for indispensável. Não use como primeira etapa de inspeção.",
-    inputSchema: readFullGitlabFileInputSchema,
+      "Use apenas quando o conteúdo integral do documento for realmente necessário para entender um manual curto, uma política, uma especificação pequena ou um documento com poucos trechos relevantes. Não use como forma padrão de inspeção documental; prefira read_document_excerpt para leitura localizada. Sempre informe documentId.",
+    inputSchema: readFullDocumentInputSchema,
     llmInputSchema: z.object({
-      filePath: z.string().min(1),
+      documentId: z.string().min(1),
     }),
     projectScoped: true,
-    handler: readFullGitlabFile,
-  }),
-
-  defineTool({
-    name: "get_project_readme",
-    description:
-      "Obtém o conteúdo do README do repositório GitLab. Use para entender propósito do projeto, setup, comandos e visão geral técnica.",
-    llmDescription:
-      "Use somente quando a pergunta exigir visão geral do projeto, setup, execução ou contexto inicial de alto nível. Não use como substituto de busca no código.",
-    inputSchema: getProjectReadmeInputSchema,
-    llmInputSchema: z.object({}),
-    projectScoped: true,
-    handler: getProjectReadme,
+    handler: readFullDocument,
   }),
 ] as const satisfies ToolRegistry;
 

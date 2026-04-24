@@ -33,11 +33,22 @@ export class SupportService {
       },
     });
 
+    const messages = await prisma.chatMessage.findMany({
+      where: { sessionId: session.id },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+    });
+
+    const orderedMessages = messages.reverse();
+
     const { answer, toolHistory } = await withProjectScopedMcpTools(
       { projectId: params.projectId },
       async (tools) => {
         return this.llmService.generateSupportAnswerWithTools({
-          question: params.question,
+          messages: orderedMessages.map((msg) => ({
+            role: msg.role as "user" | "assistant",
+            content: msg.content,
+          })),
           tools,
         });
       },
