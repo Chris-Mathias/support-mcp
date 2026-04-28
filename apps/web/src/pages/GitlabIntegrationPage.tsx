@@ -57,6 +57,7 @@ export function GitlabIntegrationPage() {
     setFileContent(null);
     setError(null);
     setCurrentPath("");
+
     if (!projectId) {
       setIntegration(null);
       setRepoUrl("");
@@ -65,7 +66,9 @@ export function GitlabIntegrationPage() {
       setToken("");
       return;
     }
+
     setLoadingIntegration(true);
+
     try {
       const res = await api.get<GitlabIntegration>(
         `/projects/${projectId}/gitlab-integration`,
@@ -88,8 +91,10 @@ export function GitlabIntegrationPage() {
 
   async function handleSaveIntegration() {
     if (!selectedProjectId) return;
+
     setSavingIntegration(true);
     setError(null);
+
     try {
       const res = await api.post<GitlabIntegration>(
         `/projects/${selectedProjectId}/gitlab-integration`,
@@ -110,11 +115,13 @@ export function GitlabIntegrationPage() {
 
   async function handleLoadFiles(path = "") {
     if (!selectedProjectId) return;
+
     setLoadingFiles(true);
     setError(null);
     setFileContent(null);
     setSelectedFilePath("");
     setCurrentPath(path);
+
     try {
       const res = await api.get<GitlabTreeItem[]>(
         `/projects/${selectedProjectId}/gitlab/files`,
@@ -130,9 +137,11 @@ export function GitlabIntegrationPage() {
 
   async function handleOpenFile(filePath: string) {
     if (!selectedProjectId) return;
+
     setLoadingFileContent(true);
     setError(null);
     setSelectedFilePath(filePath);
+
     try {
       const res = await api.get<GitlabFileContent>(
         `/projects/${selectedProjectId}/gitlab/file-content`,
@@ -147,21 +156,23 @@ export function GitlabIntegrationPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      <div className="flex-none bg-gray-50 border-b border-gray-200 p-6 shadow-sm z-10">
-        <div className="flex flex-col md:flex-row gap-6 max-w-7xl mx-auto">
+    <div className="flex h-full flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <div className="z-10 flex-none border-b border-zinc-200 bg-zinc-50 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 md:flex-row">
           <div className="w-full md:w-1/3">
-            <h1 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <Settings className="text-indigo-600" />
+            <h1 className="mb-4 flex items-center gap-2 text-xl font-bold text-zinc-800 dark:text-zinc-100">
+              <Settings className="text-zinc-700 dark:text-zinc-300" />
               Integração GitLab
             </h1>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
+
+            <label className="mb-1 block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
               Projeto
             </label>
+
             <select
               value={selectedProjectId}
               onChange={(e) => handleProjectChange(e.target.value)}
-              className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-zinc-800 outline-none transition-all focus:ring-2 focus:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               disabled={loadingProjects}
             >
               <option value="">Selecione...</option>
@@ -171,66 +182,71 @@ export function GitlabIntegrationPage() {
                 </option>
               ))}
             </select>
+
             {integration && (
-              <div className="mt-4 flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+              <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
                 <CheckCircle size={16} /> Integração Ativa
               </div>
             )}
           </div>
 
           {selectedProjectId && !loadingIntegration && (
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   Repo URL
                 </label>
                 <input
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
                   placeholder="https://gitlab.com/..."
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   Project Path
                 </label>
                 <input
                   value={projectPath}
                   onChange={(e) => setProjectPath(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
                   placeholder="grupo/repo"
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   Branch
                 </label>
                 <input
                   value={branch}
                   onChange={(e) => setBranch(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 />
               </div>
+
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   Token (Personal/Project)
                 </label>
                 <input
                   type="password"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
                   placeholder="glpat-..."
                 />
               </div>
-              <div className="md:col-span-2 flex justify-end">
+
+              <div className="flex justify-end md:col-span-2">
                 <button
                   onClick={handleSaveIntegration}
                   disabled={
                     savingIntegration || !repoUrl || !projectPath || !token
                   }
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
                 >
                   <Save size={16} />{" "}
                   {savingIntegration ? "Salvando..." : "Salvar Configuração"}
@@ -239,21 +255,25 @@ export function GitlabIntegrationPage() {
             </div>
           )}
         </div>
+
         {error && (
-          <p className="text-red-500 text-sm mt-4 max-w-7xl mx-auto">{error}</p>
+          <p className="mx-auto mt-4 max-w-7xl text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
         )}
       </div>
 
       {integration && (
-        <div className="flex-1 flex overflow-hidden bg-white">
-          <div className="w-72 border-r border-gray-200 flex flex-col bg-gray-50">
-            <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-100">
-              <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+        <div className="flex flex-1 overflow-hidden bg-white dark:bg-zinc-950">
+          <div className="flex w-72 flex-col border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-100 p-3 dark:border-zinc-800 dark:bg-zinc-800">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
                 Explorer
               </span>
+
               <button
                 onClick={() => handleLoadFiles("")}
-                className="p-1 hover:bg-gray-200 rounded text-gray-500"
+                className="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-700"
                 title="Recarregar raiz"
               >
                 <RefreshCw
@@ -271,13 +291,15 @@ export function GitlabIntegrationPage() {
                     parts.pop();
                     handleLoadFiles(parts.join("/"));
                   }}
-                  className="flex items-center gap-2 text-sm text-gray-600 p-2 hover:bg-gray-200 rounded-lg w-full text-left mb-2 font-medium"
+                  className="mb-2 flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm font-medium text-zinc-600 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
                   .. (voltar)
                 </button>
               )}
+
               {files.map((item) => {
                 const isDir = item.type === "tree";
+
                 return (
                   <button
                     key={item.path}
@@ -286,48 +308,57 @@ export function GitlabIntegrationPage() {
                         ? handleLoadFiles(item.path)
                         : handleOpenFile(item.path)
                     }
-                    className={`flex items-center gap-2 w-full text-left p-1.5 rounded text-sm transition-colors ${selectedFilePath === item.path ? "bg-indigo-100 text-indigo-700 font-medium" : "text-gray-700 hover:bg-gray-200"}`}
+                    className={`flex w-full items-center gap-2 rounded p-1.5 text-left text-sm transition-colors ${
+                      selectedFilePath === item.path
+                        ? "bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                        : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    }`}
                   >
                     {isDir ? (
                       <Folder
                         size={16}
-                        className="text-blue-500 fill-blue-500/20"
+                        className="fill-zinc-500/20 text-zinc-500 dark:fill-zinc-300/20 dark:text-zinc-300"
                       />
                     ) : (
-                      <FileCode size={16} className="text-gray-500" />
+                      <FileCode
+                        size={16}
+                        className="text-zinc-500 dark:text-zinc-400"
+                      />
                     )}
                     <span className="truncate">{item.name}</span>
                   </button>
                 );
               })}
+
               {files.length === 0 && !loadingFiles && (
-                <p className="text-xs text-gray-400 text-center mt-4">
+                <p className="mt-4 text-center text-xs text-zinc-400 dark:text-zinc-500">
                   Nenhum arquivo listado.
                 </p>
               )}
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col bg-[#1e1e1e]">
+          <div className="flex flex-1 flex-col bg-zinc-950">
             {loadingFileContent ? (
-              <div className="flex-1 flex items-center justify-center text-gray-400">
-                <RefreshCw size={32} className="animate-spin mb-4" />
+              <div className="flex flex-1 items-center justify-center text-zinc-400">
+                <RefreshCw size={32} className="mb-4 animate-spin" />
               </div>
             ) : fileContent ? (
               <>
-                <div className="flex-none bg-[#2d2d2d] px-4 py-2 flex items-center gap-2 text-[#cccccc] text-sm font-mono border-b border-[#3e3e3e]">
+                <div className="flex flex-none items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-4 py-2 font-mono text-sm text-zinc-300">
                   <FileCode size={16} />
                   {fileContent.file_path}
                 </div>
+
                 <textarea
                   readOnly
                   value={fileContent.decodedContent}
-                  className="flex-1 w-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm p-4 outline-none resize-none overflow-y-auto"
+                  className="flex-1 w-full resize-none overflow-y-auto bg-zinc-950 p-4 font-mono text-sm text-zinc-300 outline-none"
                   spellCheck={false}
                 />
               </>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-[#5c5c5c]">
+              <div className="flex flex-1 flex-col items-center justify-center text-zinc-600 dark:text-zinc-500">
                 <FileCode size={64} className="mb-4 opacity-50" />
                 <p>Selecione um arquivo para visualizar o conteúdo.</p>
               </div>

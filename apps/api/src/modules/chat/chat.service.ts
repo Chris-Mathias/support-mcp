@@ -26,7 +26,11 @@ export class ChatService {
 
   async listSessionsByProject(projectId: string) {
     return prisma.chatSession.findMany({
-      where: { projectId },
+      where: {
+        projectId,
+        messages: { some: {} },
+        closedAt: null,
+      },
       orderBy: { createdAt: "desc" },
       include: {
         messages: {

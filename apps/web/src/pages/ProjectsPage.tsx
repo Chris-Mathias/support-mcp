@@ -42,57 +42,65 @@ export function ProjectsPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto p-8 bg-gray-50">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="h-full overflow-y-auto bg-zinc-50 p-8 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <div className="mx-auto max-w-5xl space-y-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Projetos</h1>
-          <p className="text-gray-500 mt-1">
+          <h1 className="text-3xl font-bold text-zinc-800 dark:text-zinc-100">
+            Projetos
+          </h1>
+          <p className="mt-1 text-zinc-500 dark:text-zinc-400">
             Gerencie os projetos disponíveis para o suporte.
           </p>
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-200">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
             {error}
           </div>
         )}
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <FolderPlus className="text-indigo-600" size={20} />
+        <div className="rounded-2xl border border-zinc-100 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
+            <FolderPlus
+              className="text-zinc-700 dark:text-zinc-300"
+              size={20}
+            />
             Novo Projeto
           </h2>
+
           <form
             onSubmit={handleSubmit}
-            className="flex flex-col md:flex-row gap-4 items-start md:items-end"
+            className="flex flex-col items-start gap-4 md:flex-row md:items-end"
           >
-            <div className="flex-1 w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="w-full flex-1">
+              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 Nome do projeto
               </label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ex.: Suporte ERP Cliente A"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2 text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
                 required
               />
             </div>
-            <div className="flex-[2] w-full">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+
+            <div className="w-full flex-[2]">
+              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 Descrição
               </label>
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Descrição opcional"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2 text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
               />
             </div>
+
             <button
               type="submit"
               disabled={loading || !name.trim()}
-              className="w-full md:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
+              className="w-full rounded-xl bg-zinc-800 px-6 py-2.5 font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600 md:w-auto"
             >
               {loading ? "Criando..." : "Criar Projeto"}
             </button>
@@ -100,41 +108,51 @@ export function ProjectsPage() {
         </div>
 
         <div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
+          <h2 className="mb-4 text-xl font-semibold text-zinc-800 dark:text-zinc-100">
             Lista de projetos
           </h2>
+
           {projects.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-2xl border border-gray-100 text-gray-400">
+            <div className="rounded-2xl border border-zinc-100 bg-white py-12 text-center text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500">
               Nenhum projeto cadastrado ainda.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => (
                 <div
                   key={project.id}
-                  className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group relative"
+                  className="group relative rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
                 >
-                  <h3 className="text-lg font-bold text-gray-800 mb-3 pr-8">
+                  <h3 className="mb-3 pr-8 text-lg font-bold text-zinc-800 dark:text-zinc-100">
                     {project.name}
                   </h3>
-                  <div className="space-y-2 text-sm text-gray-600">
+
+                  <div className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
                     <div className="flex items-start gap-2">
                       <Info
                         size={16}
-                        className="mt-0.5 text-gray-400 flex-shrink-0"
+                        className="mt-0.5 flex-shrink-0 text-zinc-400 dark:text-zinc-500"
                       />
                       <span className="line-clamp-2">
                         {project.description || "Sem descrição"}
                       </span>
                     </div>
+
                     <div className="flex items-center gap-2">
-                      <Hash size={16} className="text-gray-400" />
+                      <Hash
+                        size={16}
+                        className="text-zinc-400 dark:text-zinc-500"
+                      />
                       <span className="truncate" title={project.projectId}>
                         Proj ID: {project.projectId}
                       </span>
                     </div>
+
                     <div className="flex items-center gap-2">
-                      <Calendar size={16} className="text-gray-400" />
+                      <Calendar
+                        size={16}
+                        className="text-zinc-400 dark:text-zinc-500"
+                      />
                       <span>
                         {new Date(project.createdAt).toLocaleDateString()}
                       </span>
