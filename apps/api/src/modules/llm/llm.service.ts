@@ -158,6 +158,33 @@ export class LlmService {
     };
   }
 
+  async generateChatTitle(params: { question: string; answer: string }) {
+    const titleModel = process.env.LLM_TITLE_MODEL || "gpt-5-nano";
+
+    const response = await this.client.responses.create({
+      model: titleModel,
+      input: [
+        {
+          role: "system",
+          content:
+            "Você gera títulos curtos para conversas de suporte técnico. Use a pergunta do usuário e a resposta do assistente para entender o assunto principal. Responda apenas com o título, sem aspas, sem ponto final e com no máximo 6 palavras.",
+        },
+        {
+          role: "user",
+          content: [
+            "Pergunta do usuário:",
+            params.question,
+            "",
+            "Resposta do assistente:",
+            params.answer,
+          ].join("\n"),
+        },
+      ],
+    });
+
+    return normalizeChatTitle(response.output_text);
+  }
+
   private async executeTool(
     tools: ToolRuntime,
     toolName: string,
@@ -195,4 +222,17 @@ function safeJsonParse(value: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function normalizeChatTitle(value: string) {
+  const title = value
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!title) {
+    return "Novo chat";
+  }
+
+  return title.length > 60 ? `${title.slice(0, 57).trim()}...` : title;
 }

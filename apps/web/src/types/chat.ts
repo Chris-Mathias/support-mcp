@@ -1,6 +1,7 @@
 export type ChatSession = {
   id: string;
   projectId: string;
+  title: string | null;
   createdAt: string;
   closedAt?: string | null;
 };

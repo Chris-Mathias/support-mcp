@@ -23,6 +23,7 @@ model Project {
 model ChatSession {
   id        String   @id @default(cuid())
   projectId String
+  title     String?
   createdAt DateTime @default(now())
   closedAt  DateTime?
 

@@ -1,7 +1,6 @@
 import { prisma } from "../../lib/prisma.js";
 import { LlmService } from "../llm/llm.service.js";
 import { withProjectScopedMcpTools } from "../llm/llm-tool-runtime.js";
-import { sanitizeAssistantOutput } from "../safety/output-policy.js";
 
 type AskQuestionParams = {
   sessionId: string;
@@ -54,19 +53,36 @@ export class SupportService {
       },
     );
 
-    const safeAnswer = sanitizeAssistantOutput(answer);
+    const shouldGenerateTitle = !session.title;
+
+    const generatedTitle = shouldGenerateTitle
+      ? await this.llmService.generateChatTitle({
+          question: params.question,
+          answer: answer,
+        })
+      : null;
+
+    const updatedSession = generatedTitle
+      ? await prisma.chatSession.update({
+          where: { id: session.id },
+          data: {
+            title: generatedTitle,
+          },
+        })
+      : session;
 
     const assistantMessage = await prisma.chatMessage.create({
       data: {
         sessionId: session.id,
         role: "assistant",
-        content: safeAnswer,
+        content: answer,
       },
     });
 
     return {
-      answer: safeAnswer,
+      answer: answer,
       assistantMessage,
+      session: updatedSession,
       toolHistory,
     };
   }
