@@ -2,7 +2,7 @@ import { createMcpClient } from "../../lib/mcp-client.js";
 import {
   buildProjectScopedRuntime,
   buildProjectScopedRuntimeByToolName,
-} from "@support-mvp/mcp-server/src/tools-registry.js";
+} from "@support-mvp/mcp-server/tools-registry.js";
 
 type RuntimeContext = {
   projectId: string;

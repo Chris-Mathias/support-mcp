@@ -1,28 +1,17 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { executeRegisteredTool } from "@support-mvp/mcp-server/tools-registry.js";
 
 export async function createMcpClient() {
-  const transport = new StdioClientTransport({
-    command: "npx",
-    args: ["tsx", "../../apps/mcp-server/src/server.ts"],
-  });
-
-  const client = new Client(
-    {
-      name: "support-mvp-api-client",
-      version: "1.0.0",
+  const client = {
+    async callTool(input: {
+      name: string;
+      arguments?: Record<string, unknown>;
+    }) {
+      return executeRegisteredTool(input.name, input.arguments ?? {});
     },
-    {
-      capabilities: {},
-    },
-  );
-
-  await client.connect(transport);
+  };
 
   return {
     client,
-    close: async () => {
-      await client.close();
-    },
+    close: async () => {},
   };
 }

@@ -1,6 +1,3 @@
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
 import OpenAI from "openai";
 import type {
   Response,
@@ -9,7 +6,8 @@ import type {
 import {
   buildOpenAiToolDefinitions,
   snakeToCamel,
-} from "@support-mvp/mcp-server/src/tools-registry.js";
+} from "@support-mvp/mcp-server/tools-registry.js";
+import { systemPrompt } from "./prompt.js";
 
 type RuntimeToolFn = (args?: Record<string, unknown>) => Promise<string>;
 type ToolRuntime = Record<string, RuntimeToolFn>;
@@ -51,11 +49,6 @@ type SupportAnswerHandlers = {
     resultPreview: string;
   }) => void;
 };
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const promptPath = path.resolve(__dirname, "prompt.txt");
-const systemPrompt: string = fs.readFileSync(promptPath, "utf-8");
 
 export class LlmService {
   private client: OpenAI;
