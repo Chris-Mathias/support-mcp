@@ -2,6 +2,10 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
+import type {
+  Response,
+  ResponseCreateParamsBase,
+} from "openai/resources/responses/responses";
 import {
   buildOpenAiToolDefinitions,
   snakeToCamel,
@@ -34,6 +38,20 @@ type ChatMessageInput = {
   content: string;
 };
 
+type SupportAnswerHandlers = {
+  onTextDelta?: (delta: string, content: string) => void;
+  onToolCall?: (info: {
+    step: number;
+    tool: string;
+    arguments: Record<string, unknown>;
+  }) => void;
+  onToolResult?: (info: {
+    step: number;
+    tool: string;
+    resultPreview: string;
+  }) => void;
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const promptPath = path.resolve(__dirname, "prompt.txt");
@@ -57,12 +75,12 @@ export class LlmService {
   async generateSupportAnswerWithTools(params: {
     messages: ChatMessageInput[];
     tools: ToolRuntime;
-  }) {
+  } & SupportAnswerHandlers) {
     const toolHistory: ToolCallRecord[] = [];
 
     const toolDefinitions = buildOpenAiToolDefinitions({});
 
-    let response = await this.client.responses.create({
+    let response = await this.createResponse({
       model: this.model,
       input: [
         { role: "system", content: systemPrompt },
@@ -72,7 +90,7 @@ export class LlmService {
         })),
       ],
       tools: toolDefinitions,
-    });
+    }, params.onTextDelta);
 
     for (let step = 0; step < 6; step++) {
       const functionCalls = response.output.filter(
@@ -93,6 +111,11 @@ export class LlmService {
 
         console.log(`\n[Passo ${step}] LLM chamou a ferramenta: ${call.name}`);
         console.log(`[Passo ${step}] Argumentos enviados:`, parsedArgs);
+        params.onToolCall?.({
+          step,
+          tool: call.name,
+          arguments: parsedArgs,
+        });
 
         const output = await this.executeTool(
           params.tools,
@@ -110,6 +133,11 @@ export class LlmService {
           arguments: parsedArgs,
           resultPreview: output.slice(0, 1000),
         });
+        params.onToolResult?.({
+          step,
+          tool: call.name,
+          resultPreview: output.slice(0, 1000),
+        });
 
         toolOutputs.push({
           type: "function_call_output",
@@ -118,12 +146,12 @@ export class LlmService {
         });
       }
 
-      response = await this.client.responses.create({
+      response = await this.createResponse({
         model: this.model,
         previous_response_id: response.id,
         input: toolOutputs,
         tools: toolDefinitions,
-      });
+      }, params.onTextDelta);
     }
 
     const pendingCalls = response.output.filter(
@@ -146,11 +174,11 @@ export class LlmService {
       }),
     );
 
-    const finalResponse = await this.client.responses.create({
+    const finalResponse = await this.createResponse({
       model: this.model,
       previous_response_id: response.id,
       input: fallbackOutputs,
-    });
+    }, params.onTextDelta);
 
     return {
       answer: finalResponse.output_text.trim(),
@@ -210,6 +238,40 @@ export class LlmService {
     }
 
     throw new Error(`Tool não suportada no runtime: ${toolName}`);
+  }
+
+  private async createResponse(
+    params: ResponseCreateParamsBase,
+    onTextDelta?: (delta: string, content: string) => void,
+  ): Promise<Response> {
+    const stream = await this.client.responses.create({
+      ...params,
+      stream: true,
+    });
+
+    let response: Response | null = null;
+    let content = "";
+
+    for await (const event of stream) {
+      if (
+        event.type === "response.output_text.delta" ||
+        event.type === "response.refusal.delta"
+      ) {
+        content += event.delta;
+        onTextDelta?.(event.delta, content);
+      }
+
+      if (event.type === "response.completed") {
+        response = event.response;
+      }
+    }
+
+    if (!response) {
+      throw new Error("LLM_STREAM_INCOMPLETE");
+    }
+
+    response.output_text = content;
+    return response;
   }
 }
 

@@ -8,10 +8,38 @@ type AskQuestionParams = {
   question: string;
 };
 
+type AskQuestionStreamHandlers = {
+  onTextDelta?: (delta: string, content: string) => void;
+  onToolCall?: (info: {
+    step: number;
+    tool: string;
+    arguments: Record<string, unknown>;
+  }) => void;
+  onToolResult?: (info: {
+    step: number;
+    tool: string;
+    resultPreview: string;
+  }) => void;
+};
+
 export class SupportService {
   private llmService = new LlmService();
 
   async askQuestion(params: AskQuestionParams) {
+    return this.answerQuestion(params);
+  }
+
+  async askQuestionStream(
+    params: AskQuestionParams,
+    handlers: AskQuestionStreamHandlers,
+  ) {
+    return this.answerQuestion(params, handlers);
+  }
+
+  private async answerQuestion(
+    params: AskQuestionParams,
+    handlers?: AskQuestionStreamHandlers,
+  ) {
     const session = await prisma.chatSession.findUnique({
       where: { id: params.sessionId },
     });
@@ -49,6 +77,9 @@ export class SupportService {
             content: msg.content,
           })),
           tools,
+          onTextDelta: handlers?.onTextDelta,
+          onToolCall: handlers?.onToolCall,
+          onToolResult: handlers?.onToolResult,
         });
       },
     );

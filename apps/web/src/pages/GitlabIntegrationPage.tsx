@@ -1,19 +1,26 @@
 import { useEffect, useState } from "react";
+import {
+  CheckCircle,
+  FileCode,
+  Folder,
+  GitBranch,
+  RefreshCw,
+  Save,
+  Settings,
+} from "lucide-react";
+import { WorkspacePage } from "../components/layout/WorkspacePage";
+import { AlertBanner } from "../components/ui/AlertBanner";
+import { EmptyState } from "../components/ui/EmptyState";
+import { Panel } from "../components/ui/Panel";
+import { ProjectSelect } from "../components/ui/ProjectSelect";
+import { cn } from "../lib/cn";
 import { api } from "../services/api";
-import type { Project } from "../types/project";
 import type {
   GitlabFileContent,
   GitlabIntegration,
   GitlabTreeItem,
 } from "../types/gitlab";
-import {
-  Settings,
-  RefreshCw,
-  Folder,
-  FileCode,
-  CheckCircle,
-  Save,
-} from "lucide-react";
+import type { Project } from "../types/project";
 
 export function GitlabIntegrationPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -43,9 +50,10 @@ export function GitlabIntegrationPage() {
 
   useEffect(() => {
     setLoadingProjects(true);
+
     api
       .get<Project[]>("/projects")
-      .then((res) => setProjects(res.data))
+      .then((response) => setProjects(response.data))
       .catch(() => setError("Não foi possível carregar os projetos."))
       .finally(() => setLoadingProjects(false));
   }, []);
@@ -70,14 +78,14 @@ export function GitlabIntegrationPage() {
     setLoadingIntegration(true);
 
     try {
-      const res = await api.get<GitlabIntegration>(
+      const response = await api.get<GitlabIntegration>(
         `/projects/${projectId}/gitlab-integration`,
       );
-      setIntegration(res.data);
-      setRepoUrl(res.data.repoUrl);
-      setProjectPath(res.data.projectPath);
-      setBranch(res.data.branch);
-      setToken(res.data.token);
+      setIntegration(response.data);
+      setRepoUrl(response.data.repoUrl);
+      setProjectPath(response.data.projectPath);
+      setBranch(response.data.branch);
+      setToken(response.data.token);
     } catch {
       setIntegration(null);
       setRepoUrl("");
@@ -96,7 +104,7 @@ export function GitlabIntegrationPage() {
     setError(null);
 
     try {
-      const res = await api.post<GitlabIntegration>(
+      const response = await api.post<GitlabIntegration>(
         `/projects/${selectedProjectId}/gitlab-integration`,
         {
           repoUrl,
@@ -105,7 +113,7 @@ export function GitlabIntegrationPage() {
           token,
         },
       );
-      setIntegration(res.data);
+      setIntegration(response.data);
     } catch {
       setError("Não foi possível salvar a integração.");
     } finally {
@@ -123,11 +131,11 @@ export function GitlabIntegrationPage() {
     setCurrentPath(path);
 
     try {
-      const res = await api.get<GitlabTreeItem[]>(
+      const response = await api.get<GitlabTreeItem[]>(
         `/projects/${selectedProjectId}/gitlab/files`,
         { params: { path } },
       );
-      setFiles(res.data);
+      setFiles(response.data);
     } catch {
       setError("Não foi possível listar arquivos.");
     } finally {
@@ -143,229 +151,243 @@ export function GitlabIntegrationPage() {
     setSelectedFilePath(filePath);
 
     try {
-      const res = await api.get<GitlabFileContent>(
+      const response = await api.get<GitlabFileContent>(
         `/projects/${selectedProjectId}/gitlab/file-content`,
         { params: { filePath } },
       );
-      setFileContent(res.data);
+      setFileContent(response.data);
     } catch {
-      setError("Não foi carregar o conteúdo do arquivo.");
+      setError("Não foi possível carregar o conteúdo do arquivo.");
     } finally {
       setLoadingFileContent(false);
     }
   }
 
   return (
-    <div className="flex h-full flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <div className="z-10 flex-none border-b border-zinc-200 bg-zinc-50 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 md:flex-row">
-          <div className="w-full md:w-1/3">
-            <h1 className="mb-4 flex items-center gap-2 text-xl font-bold text-zinc-800 dark:text-zinc-100">
+    <WorkspacePage
+      sidebar={
+        <div className="flex flex-1 flex-col gap-5 px-5 py-6">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-800 dark:text-zinc-100">
               <Settings className="text-zinc-700 dark:text-zinc-300" />
               Integração GitLab
             </h1>
-
-            <label className="mb-1 block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              Projeto
-            </label>
-
-            <select
-              value={selectedProjectId}
-              onChange={(e) => handleProjectChange(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-zinc-800 outline-none transition-all focus:ring-2 focus:ring-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-              disabled={loadingProjects}
-            >
-              <option value="">Selecione...</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-
-            {integration && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-                <CheckCircle size={16} /> Integração Ativa
-              </div>
-            )}
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Configure o repositório associado ao projeto e navegue pelo código.
+            </p>
           </div>
 
-          {selectedProjectId && !loadingIntegration && (
-            <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  Repo URL
-                </label>
-                <input
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-                  placeholder="https://gitlab.com/..."
-                />
-              </div>
+          <ProjectSelect
+            value={selectedProjectId}
+            projects={projects}
+            placeholder="Selecione..."
+            disabled={loadingProjects}
+            onChange={handleProjectChange}
+          />
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  Project Path
-                </label>
-                <input
-                  value={projectPath}
-                  onChange={(e) => setProjectPath(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-                  placeholder="grupo/repo"
-                />
-              </div>
+          {integration ? (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <CheckCircle size={16} /> Integração ativa
+            </div>
+          ) : null}
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  Branch
-                </label>
-                <input
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-                />
-              </div>
+          {selectedProjectId && !loadingIntegration ? (
+            <Panel className="p-5">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    Repo URL
+                  </label>
+                  <input
+                    value={repoUrl}
+                    onChange={(event) => setRepoUrl(event.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                    placeholder="https://gitlab.com/..."
+                  />
+                </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  Token (Personal/Project)
-                </label>
-                <input
-                  type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-                  placeholder="glpat-..."
-                />
-              </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    Project Path
+                  </label>
+                  <input
+                    value={projectPath}
+                    onChange={(event) => setProjectPath(event.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                    placeholder="grupo/repo"
+                  />
+                </div>
 
-              <div className="flex justify-end md:col-span-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    Branch
+                  </label>
+                  <input
+                    value={branch}
+                    onChange={(event) => setBranch(event.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition-all focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    Token (Personal/Project)
+                  </label>
+                  <input
+                    type="password"
+                    value={token}
+                    onChange={(event) => setToken(event.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                    placeholder="glpat-..."
+                  />
+                </div>
+
                 <button
                   onClick={handleSaveIntegration}
-                  disabled={
-                    savingIntegration || !repoUrl || !projectPath || !token
-                  }
-                  className="flex items-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+                  disabled={savingIntegration || !repoUrl || !projectPath || !token}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
                 >
-                  <Save size={16} />{" "}
+                  <Save size={16} />
                   {savingIntegration ? "Salvando..." : "Salvar Configuração"}
                 </button>
               </div>
-            </div>
-          )}
+            </Panel>
+          ) : null}
         </div>
+      }
+    >
+      {error ? <AlertBanner className="m-4">{error}</AlertBanner> : null}
 
-        {error && (
-          <p className="mx-auto mt-4 max-w-7xl text-sm text-red-600 dark:text-red-400">
-            {error}
-          </p>
-        )}
-      </div>
+      {!selectedProjectId ? (
+        <EmptyState
+          icon={GitBranch}
+          title="Selecione um projeto para configurar a integração."
+          description="A navegação do repositório aparece aqui depois que um projeto for escolhido."
+          className="flex-1"
+        />
+      ) : loadingIntegration ? (
+        <div className="flex flex-1 items-center justify-center text-zinc-400 dark:text-zinc-500">
+          <RefreshCw size={26} className="animate-spin" />
+        </div>
+      ) : !integration ? (
+        <div className="flex flex-1 p-6">
+          <Panel className="mx-auto flex w-full max-w-5xl items-center justify-center">
+            <EmptyState
+              icon={Settings}
+              title="Preencha a configuração do GitLab na coluna lateral."
+              description="Depois de salvar, o explorador de arquivos e o visualizador de conteúdo ficam disponíveis aqui."
+            />
+          </Panel>
+        </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden p-6">
+          <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-1 gap-4 overflow-hidden">
+            <Panel className="flex w-80 min-w-0 flex-col overflow-hidden">
+              <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
+                  Explorer
+                </span>
 
-      {integration && (
-        <div className="flex flex-1 overflow-hidden bg-white dark:bg-zinc-950">
-          <div className="flex w-72 flex-col border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-100 p-3 dark:border-zinc-800 dark:bg-zinc-800">
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                Explorer
-              </span>
-
-              <button
-                onClick={() => handleLoadFiles("")}
-                className="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                title="Recarregar raiz"
-              >
-                <RefreshCw
-                  size={14}
-                  className={loadingFiles ? "animate-spin" : ""}
-                />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-2">
-              {currentPath && (
                 <button
-                  onClick={() => {
-                    const parts = currentPath.split("/");
-                    parts.pop();
-                    handleLoadFiles(parts.join("/"));
-                  }}
-                  className="mb-2 flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm font-medium text-zinc-600 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  onClick={() => handleLoadFiles("")}
+                  className="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                  title="Recarregar raiz"
                 >
-                  .. (voltar)
+                  <RefreshCw
+                    size={14}
+                    className={loadingFiles ? "animate-spin" : ""}
+                  />
                 </button>
-              )}
+              </div>
 
-              {files.map((item) => {
-                const isDir = item.type === "tree";
-
-                return (
+              <div className="flex-1 overflow-y-auto p-2">
+                {currentPath ? (
                   <button
-                    key={item.path}
-                    onClick={() =>
-                      isDir
-                        ? handleLoadFiles(item.path)
-                        : handleOpenFile(item.path)
-                    }
-                    className={`flex w-full items-center gap-2 rounded p-1.5 text-left text-sm transition-colors ${
-                      selectedFilePath === item.path
-                        ? "bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                        : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    }`}
+                    onClick={() => {
+                      const parts = currentPath.split("/");
+                      parts.pop();
+                      handleLoadFiles(parts.join("/"));
+                    }}
+                    className="mb-2 flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm font-medium text-zinc-600 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   >
-                    {isDir ? (
-                      <Folder
-                        size={16}
-                        className="fill-zinc-500/20 text-zinc-500 dark:fill-zinc-300/20 dark:text-zinc-300"
-                      />
-                    ) : (
-                      <FileCode
-                        size={16}
-                        className="text-zinc-500 dark:text-zinc-400"
-                      />
-                    )}
-                    <span className="truncate">{item.name}</span>
+                    .. (voltar)
                   </button>
-                );
-              })}
+                ) : null}
 
-              {files.length === 0 && !loadingFiles && (
-                <p className="mt-4 text-center text-xs text-zinc-400 dark:text-zinc-500">
-                  Nenhum arquivo listado.
-                </p>
+                {files.map((item) => {
+                  const isDir = item.type === "tree";
+
+                  return (
+                    <button
+                      key={item.path}
+                      onClick={() =>
+                        isDir
+                          ? handleLoadFiles(item.path)
+                          : handleOpenFile(item.path)
+                      }
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded p-1.5 text-left text-sm transition-colors",
+                        selectedFilePath === item.path
+                          ? "bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                          : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800",
+                      )}
+                    >
+                      {isDir ? (
+                        <Folder
+                          size={16}
+                          className="fill-zinc-500/20 text-zinc-500 dark:fill-zinc-300/20 dark:text-zinc-300"
+                        />
+                      ) : (
+                        <FileCode
+                          size={16}
+                          className="text-zinc-500 dark:text-zinc-400"
+                        />
+                      )}
+                      <span className="truncate">{item.name}</span>
+                    </button>
+                  );
+                })}
+
+                {files.length === 0 && !loadingFiles ? (
+                  <p className="mt-4 text-center text-xs text-zinc-400 dark:text-zinc-500">
+                    Nenhum arquivo listado. Use o recarregar para consultar a raiz.
+                  </p>
+                ) : null}
+              </div>
+            </Panel>
+
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-sm">
+              {loadingFileContent ? (
+                <div className="flex flex-1 items-center justify-center text-zinc-400">
+                  <RefreshCw size={32} className="animate-spin" />
+                </div>
+              ) : fileContent ? (
+                <>
+                  <div className="flex flex-none items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-4 py-2 font-mono text-sm text-zinc-300">
+                    <FileCode size={16} />
+                    {fileContent.file_path}
+                  </div>
+
+                  <textarea
+                    readOnly
+                    value={fileContent.decodedContent}
+                    className="w-full flex-1 resize-none overflow-y-auto bg-zinc-950 p-4 font-mono text-sm text-zinc-300 outline-none"
+                    spellCheck={false}
+                  />
+                </>
+              ) : (
+                <EmptyState
+                  icon={FileCode}
+                  title="Selecione um arquivo para visualizar o conteúdo."
+                  description="O editor segue o mesmo painel principal do chat, com foco total no conteúdo ativo."
+                  className="flex-1 text-zinc-600 dark:text-zinc-500"
+                  iconClassName="opacity-50"
+                />
               )}
             </div>
-          </div>
-
-          <div className="flex flex-1 flex-col bg-zinc-950">
-            {loadingFileContent ? (
-              <div className="flex flex-1 items-center justify-center text-zinc-400">
-                <RefreshCw size={32} className="mb-4 animate-spin" />
-              </div>
-            ) : fileContent ? (
-              <>
-                <div className="flex flex-none items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-4 py-2 font-mono text-sm text-zinc-300">
-                  <FileCode size={16} />
-                  {fileContent.file_path}
-                </div>
-
-                <textarea
-                  readOnly
-                  value={fileContent.decodedContent}
-                  className="flex-1 w-full resize-none overflow-y-auto bg-zinc-950 p-4 font-mono text-sm text-zinc-300 outline-none"
-                  spellCheck={false}
-                />
-              </>
-            ) : (
-              <div className="flex flex-1 flex-col items-center justify-center text-zinc-600 dark:text-zinc-500">
-                <FileCode size={64} className="mb-4 opacity-50" />
-                <p>Selecione um arquivo para visualizar o conteúdo.</p>
-              </div>
-            )}
           </div>
         </div>
       )}
-    </div>
+    </WorkspacePage>
   );
 }
