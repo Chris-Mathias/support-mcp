@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Moon, Sun } from "lucide-react";
+import { LogOut, Moon, Sun } from "lucide-react";
 import { cn } from "../../lib/cn";
 
 type AppHeaderProps<TTab extends string> = {
@@ -12,6 +12,7 @@ type AppHeaderProps<TTab extends string> = {
   isDark: boolean;
   onChangeTab: (tab: TTab) => void;
   onToggleTheme: () => void;
+  onLogout: () => void;
 };
 
 export function AppHeader<TTab extends string>({
@@ -20,6 +21,7 @@ export function AppHeader<TTab extends string>({
   isDark,
   onChangeTab,
   onToggleTheme,
+  onLogout,
 }: AppHeaderProps<TTab>) {
   return (
     <header className="flex h-16 items-center justify-between border-b border-zinc-200 bg-white px-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -63,6 +65,16 @@ export function AppHeader<TTab extends string>({
           className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
+        <button
+          type="button"
+          onClick={onLogout}
+          aria-label="Sair"
+          title="Sair"
+          className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+        >
+          <LogOut size={18} />
         </button>
       </nav>
     </header>

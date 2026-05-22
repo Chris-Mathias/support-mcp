@@ -1,11 +1,24 @@
 import type { FastifyInstance } from "fastify";
+import {
+  documentParamsSchema,
+  projectParamsSchema,
+} from "./document.schemas.js";
 import { DocumentService } from "./document.service.js";
 
 const documentService = new DocumentService();
 
+const INVALID_PARAMS = "Parâmetros inválidos";
+
 export async function documentRoutes(app: FastifyInstance) {
   app.post("/projects/:projectId/documents", async (request, reply) => {
-    const { projectId } = request.params as { projectId: string };
+    const parsedParams = projectParamsSchema.safeParse(request.params);
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
 
     const file = await request.file();
 
@@ -19,7 +32,7 @@ export async function documentRoutes(app: FastifyInstance) {
 
     try {
       const document = await documentService.create({
-        projectId,
+        projectId: parsedParams.data.projectId,
         fileName: file.filename,
         mimeType: file.mimetype,
         fileSize: buffer.length,
@@ -39,10 +52,17 @@ export async function documentRoutes(app: FastifyInstance) {
   });
 
   app.get("/projects/:projectId/documents", async (request, reply) => {
-    const { projectId } = request.params as { projectId: string };
+    const parsedParams = projectParamsSchema.safeParse(request.params);
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
 
     try {
-      return await documentService.listByProject(projectId);
+      return await documentService.listByProject(parsedParams.data.projectId);
     } catch (error) {
       if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
         return reply.status(404).send({
@@ -57,12 +77,19 @@ export async function documentRoutes(app: FastifyInstance) {
   app.get(
     "/projects/:projectId/documents/:documentId",
     async (request, reply) => {
-      const { projectId, documentId } = request.params as {
-        projectId: string;
-        documentId: string;
-      };
+      const parsedParams = documentParamsSchema.safeParse(request.params);
 
-      const document = await documentService.getById(projectId, documentId);
+      if (!parsedParams.success) {
+        return reply.status(400).send({
+          message: INVALID_PARAMS,
+          issues: parsedParams.error.flatten(),
+        });
+      }
+
+      const document = await documentService.getById(
+        parsedParams.data.projectId,
+        parsedParams.data.documentId,
+      );
 
       if (!document) {
         return reply.status(404).send({
@@ -77,16 +104,26 @@ export async function documentRoutes(app: FastifyInstance) {
   app.delete(
     "/projects/:projectId/documents/:documentId",
     async (request, reply) => {
-      const { projectId, documentId } = request.params as {
-        projectId: string;
-        documentId: string;
-      };
+      const parsedParams = documentParamsSchema.safeParse(request.params);
+
+      if (!parsedParams.success) {
+        return reply.status(400).send({
+          message: INVALID_PARAMS,
+          issues: parsedParams.error.flatten(),
+        });
+      }
 
       try {
-        const result = await documentService.remove(projectId, documentId);
+        const result = await documentService.remove(
+          parsedParams.data.projectId,
+          parsedParams.data.documentId,
+        );
         return reply.send(result);
       } catch (error) {
-        if (error instanceof Error && error.message === "DOCUMENT_NOT_FOUND") {
+        if (
+          error instanceof Error &&
+          error.message === "DOCUMENT_NOT_FOUND"
+        ) {
           return reply.status(404).send({
             message: "Documento não encontrado",
           });

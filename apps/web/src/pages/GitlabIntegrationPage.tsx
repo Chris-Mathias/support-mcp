@@ -85,7 +85,7 @@ export function GitlabIntegrationPage() {
       setRepoUrl(response.data.repoUrl);
       setProjectPath(response.data.projectPath);
       setBranch(response.data.branch);
-      setToken(response.data.token);
+      setToken("");
     } catch {
       setIntegration(null);
       setRepoUrl("");
@@ -110,10 +110,11 @@ export function GitlabIntegrationPage() {
           repoUrl,
           projectPath,
           branch,
-          token,
+          ...(token ? { token } : {}),
         },
       );
       setIntegration(response.data);
+      setToken("");
     } catch {
       setError("Não foi possível salvar a integração.");
     } finally {
@@ -238,13 +239,27 @@ export function GitlabIntegrationPage() {
                     value={token}
                     onChange={(event) => setToken(event.target.value)}
                     className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition-all placeholder:text-zinc-400 focus:ring-2 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-                    placeholder="glpat-..."
+                    placeholder={
+                      integration?.tokenConfigured
+                        ? "Token salvo — preencha para alterar"
+                        : "glpat-..."
+                    }
                   />
+                  {integration?.tokenConfigured ? (
+                    <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+                      Token configurado. Deixe em branco para manter o atual.
+                    </p>
+                  ) : null}
                 </div>
 
                 <button
                   onClick={handleSaveIntegration}
-                  disabled={savingIntegration || !repoUrl || !projectPath || !token}
+                  disabled={
+                    savingIntegration ||
+                    !repoUrl ||
+                    !projectPath ||
+                    (!integration?.tokenConfigured && !token)
+                  }
                   className="flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
                 >
                   <Save size={16} />

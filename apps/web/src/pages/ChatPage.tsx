@@ -40,9 +40,15 @@ export function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const canSendMessage =
     Boolean(selectedProjectId) && Boolean(content.trim()) && !sendingMessage;
+
+  function abortActiveStream() {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,6 +166,10 @@ export function ChatPage() {
       return;
     }
 
+    abortActiveStream();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
     setContent("");
     setSendingMessage(true);
     setError(null);
@@ -217,38 +227,52 @@ export function ChatPage() {
             projectId: selectedProjectId,
             question,
           }),
+          credentials: "include",
+          signal: controller.signal,
         },
       );
 
       let finalPayload: AskQuestionResponse | null = null;
 
-      await readSupportStream<AskQuestionResponse>(response, (streamEvent) => {
-        if (streamEvent.event === "delta") {
-          setMessages((currentMessages) =>
-            currentMessages.map((message) =>
-              message.id === streamingMessageId
-                ? {
-                    ...message,
-                    content: streamEvent.data.content,
-                  }
-                : message,
-            ),
-          );
+      await readSupportStream<AskQuestionResponse>(
+        response,
+        (streamEvent) => {
+          if (streamEvent.event === "delta") {
+            setMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === streamingMessageId
+                  ? {
+                      ...message,
+                      content: streamEvent.data.content,
+                    }
+                  : message,
+              ),
+            );
 
-          return;
-        }
+            return;
+          }
 
-        if (streamEvent.event === "done") {
-          finalPayload = streamEvent.data;
-          return;
-        }
+          if (streamEvent.event === "done") {
+            finalPayload = streamEvent.data;
+            return;
+          }
 
-        if (streamEvent.event === "error") {
-          throw new Error(
-            streamEvent.data.message || "Não foi possível enviar a mensagem.",
-          );
-        }
-      });
+          if (streamEvent.event === "error") {
+            throw new Error(
+              streamEvent.data.message || "Não foi possível enviar a mensagem.",
+            );
+          }
+        },
+        controller.signal,
+      );
+
+      // Stream abortado intencionalmente (troca de contexto)
+      if (controller.signal.aborted) {
+        setMessages((msgs) =>
+          msgs.filter((m) => m.id !== currentStreamingMessageId),
+        );
+        return;
+      }
 
       if (!finalPayload) {
         throw new Error("STREAM_DONE_EVENT_MISSING");
@@ -275,7 +299,15 @@ export function ChatPage() {
             : message,
         ),
       );
-    } catch {
+    } catch (error) {
+      // AbortError: fetch abortado antes de conectar — cleanup silencioso
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setMessages((msgs) =>
+          msgs.filter((m) => m.id !== currentStreamingMessageId),
+        );
+        return;
+      }
+
       setContent(question);
       setMessages((currentMessages) =>
         currentMessages.filter(
@@ -284,6 +316,7 @@ export function ChatPage() {
       );
       setError("Não foi possível enviar a mensagem.");
     } finally {
+      streamAbortRef.current = null;
       setSendingMessage(false);
       setStreamingAssistantMessageId(null);
       textareaRef.current?.focus();
@@ -291,6 +324,7 @@ export function ChatPage() {
   }
 
   function handleChangeProject(projectId: string) {
+    abortActiveStream();
     setSelectedProjectId(projectId);
     setActiveSession(null);
     setMessages([]);
@@ -311,6 +345,7 @@ export function ChatPage() {
   async function handleSelectSession(session: ChatSession) {
     if (!selectedProjectId || activeSession?.id === session.id) return;
 
+    abortActiveStream();
     setActiveSession(session);
     setError(null);
     setOpenMenuSessionId(null);
@@ -328,6 +363,10 @@ export function ChatPage() {
 
   async function handleCloseSession(sessionId: string) {
     if (!selectedProjectId) return;
+
+    if (activeSession?.id === sessionId) {
+      abortActiveStream();
+    }
 
     setError(null);
 

@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const projectIdParamsSchema = z.object({
+  id: z.string().min(1),
+});
+
 export const createProjectSchema = z.object({
   name: z
     .string()

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
+import { decrypt } from "../../lib/crypto.js";
 
 export const getRepositoryOverviewInputSchema = z.object({
   projectId: z.string().min(1),
@@ -558,19 +559,20 @@ export async function getRepositoryOverview(input: unknown) {
     throw new Error("INTEGRATION_NOT_FOUND");
   }
 
+  const token = decrypt(integration.token);
   const encodedProject = encodeURIComponent(integration.projectPath);
 
   try {
     const [rootTree, recursiveTree] = await Promise.all([
       fetchAllGitlabTree({
         encodedProject,
-        token: integration.token,
+        token,
         ref: integration.branch,
         recursive: false,
       }),
       fetchAllGitlabTree({
         encodedProject,
-        token: integration.token,
+        token,
         ref: integration.branch,
         recursive: true,
       }),
@@ -588,7 +590,7 @@ export async function getRepositoryOverview(input: unknown) {
 
     const readme = await fetchReadmeFromRoot({
       encodedProject,
-      token: integration.token,
+      token,
       ref: integration.branch,
       rootTree,
     });

@@ -2,6 +2,7 @@ import { z } from "zod";
 import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
 import { buildExcerpt } from "../../lib/excerpt.js";
+import { decrypt } from "../../lib/crypto.js";
 
 export const searchRepositoryContentInputSchema = z.object({
   projectId: z.string().min(1),
@@ -279,13 +280,14 @@ export async function searchRepositoryContent(input: unknown) {
     throw new Error("INTEGRATION_NOT_FOUND");
   }
 
+  const token = decrypt(integration.token);
   const normalizedPathPrefix = normalizePath(pathPrefix);
   const encodedProject = encodeProjectPath(integration.projectPath);
 
   try {
     const treeItems = await fetchAllGitlabTree({
       encodedProject,
-      token: integration.token,
+      token,
       ref: integration.branch,
       recursive: true,
     });
@@ -328,7 +330,7 @@ export async function searchRepositoryContent(input: unknown) {
       try {
         const { size, content } = await readGitlabFile({
           encodedProject,
-          token: integration.token,
+          token,
           ref: integration.branch,
           filePath,
         });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
+import { decrypt } from "../../lib/crypto.js";
 
 export const readFullFileInputSchema = z.object({
   projectId: z.string().min(1),
@@ -144,6 +145,7 @@ export async function readFullFile(input: unknown) {
     throw new Error("INTEGRATION_NOT_FOUND");
   }
 
+  const token = decrypt(integration.token);
   const encodedProject = encodeProjectPath(integration.projectPath);
   const encodedFilePath = encodeURIComponent(filePath);
 
@@ -151,7 +153,7 @@ export async function readFullFile(input: unknown) {
     const fileResponse = await axios.get<GitlabRepositoryFileResponse>(
       `https://gitlab.com/api/v4/projects/${encodedProject}/repository/files/${encodedFilePath}`,
       {
-        headers: { "PRIVATE-TOKEN": integration.token },
+        headers: { "PRIVATE-TOKEN": token },
         params: { ref: integration.branch },
       },
     );

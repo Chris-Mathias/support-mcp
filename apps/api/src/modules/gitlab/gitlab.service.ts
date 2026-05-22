@@ -1,16 +1,27 @@
 import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
+import { encrypt, decrypt } from "../../lib/crypto.js";
 import type { CreateGitlabIntegrationInput } from "./gitlab.schemas.js";
+import type { GitlabIntegration } from "@prisma/client";
+
+type SafeGitlabIntegration = Omit<GitlabIntegration, "token"> & {
+  tokenConfigured: boolean;
+};
 
 function encodeProjectPath(projectPath: string) {
   return encodeURIComponent(projectPath);
+}
+
+function toSafe(row: GitlabIntegration): SafeGitlabIntegration {
+  const { token: _token, ...rest } = row;
+  return { ...rest, tokenConfigured: !!_token };
 }
 
 export class GitlabService {
   async createOrUpdateIntegration(
     projectId: string,
     data: CreateGitlabIntegrationInput,
-  ) {
+  ): Promise<SafeGitlabIntegration> {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
     });
@@ -19,48 +30,57 @@ export class GitlabService {
       throw new Error("PROJECT_NOT_FOUND");
     }
 
-    await this.validateGitlabAccess(data);
-
     const existing = await prisma.gitlabIntegration.findFirst({
       where: { projectId },
     });
 
+    if (!data.token && !existing) {
+      throw new Error("TOKEN_REQUIRED");
+    }
+
+    let encryptedToken: string | undefined;
+
+    if (data.token) {
+      await this.validateGitlabAccess({ ...data, token: data.token });
+      encryptedToken = encrypt(data.token);
+    }
+
     if (existing) {
-      return prisma.gitlabIntegration.update({
+      const updated = await prisma.gitlabIntegration.update({
         where: { id: existing.id },
         data: {
           repoUrl: data.repoUrl,
           projectPath: data.projectPath,
           branch: data.branch,
-          token: data.token,
+          ...(encryptedToken ? { token: encryptedToken } : {}),
         },
       });
+      return toSafe(updated);
     }
 
-    return prisma.gitlabIntegration.create({
+    const created = await prisma.gitlabIntegration.create({
       data: {
         projectId,
         repoUrl: data.repoUrl,
         projectPath: data.projectPath,
         branch: data.branch,
-        token: data.token,
+        token: encryptedToken!,
       },
     });
+    return toSafe(created);
   }
 
-  async getIntegration(projectId: string) {
-    return prisma.gitlabIntegration.findFirst({
+  async getIntegration(projectId: string): Promise<SafeGitlabIntegration | null> {
+    const row = await prisma.gitlabIntegration.findFirst({
       where: { projectId },
     });
+
+    if (!row) return null;
+    return toSafe(row);
   }
 
   async listFiles(projectId: string, path = "") {
-    const integration = await this.getIntegration(projectId);
-
-    if (!integration) {
-      throw new Error("INTEGRATION_NOT_FOUND");
-    }
-
+    const integration = await this.getIntegrationWithToken(projectId);
     const encodedProject = encodeProjectPath(integration.projectPath);
 
     const response = await axios.get(
@@ -81,12 +101,7 @@ export class GitlabService {
   }
 
   async getFileContent(projectId: string, filePath: string) {
-    const integration = await this.getIntegration(projectId);
-
-    if (!integration) {
-      throw new Error("INTEGRATION_NOT_FOUND");
-    }
-
+    const integration = await this.getIntegrationWithToken(projectId);
     const encodedProject = encodeProjectPath(integration.projectPath);
     const encodedFilePath = encodeURIComponent(filePath);
 
@@ -110,7 +125,31 @@ export class GitlabService {
     };
   }
 
-  private async validateGitlabAccess(data: CreateGitlabIntegrationInput) {
+  private async getIntegrationWithToken(projectId: string) {
+    const row = await prisma.gitlabIntegration.findFirst({
+      where: { projectId },
+    });
+
+    if (!row) {
+      throw new Error("INTEGRATION_NOT_FOUND");
+    }
+
+    let token: string;
+
+    try {
+      token = decrypt(row.token);
+    } catch {
+      throw new Error("INTEGRATION_TOKEN_INVALID");
+    }
+
+    return { ...row, token };
+  }
+
+  private async validateGitlabAccess(data: {
+    projectPath: string;
+    branch: string;
+    token: string;
+  }) {
     const encodedProject = encodeProjectPath(data.projectPath);
 
     try {

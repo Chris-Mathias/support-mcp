@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+export const sessionParamsSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export const projectParamsSchema = z.object({
+  projectId: z.string().min(1),
+});
+
+export const listMessagesQuerySchema = z.object({
+  projectId: z.string().min(1, "projectId é obrigatório"),
+});
+
+export const closeSessionBodySchema = z.object({
+  projectId: z.string().min(1, "projectId é obrigatório"),
+});
+
 export const createChatSessionSchema = z.object({
   projectId: z.string().min(1, "projectId é obrigatório"),
 });

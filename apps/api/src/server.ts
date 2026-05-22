@@ -1,20 +1,36 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import { chatRoutes } from "./modules/chat/chat.routes.js";
 import { documentRoutes } from "./modules/documents/document.routes.js";
 import { gitlabRoutes } from "./modules/gitlab/gitlab.routes.js";
 import { projectRoutes } from "./modules/projects/project.routes.js";
 import { supportRoutes } from "./modules/support/support.routes.js";
+import { authRoutes } from "./modules/auth/auth.routes.js";
+import { verifySessionToken, COOKIE_NAME } from "./lib/session.js";
 
 const app = Fastify({
   logger: true,
 });
 
+const allowedOrigins = new Set(
+  (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
 await app.register(cors, {
-  origin: true,
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.has(origin)) return cb(null, true);
+    cb(new Error("Origin not allowed"), false);
+  },
+  credentials: true,
 });
+
+await app.register(cookie);
 
 app.get("/health", async () => {
   return {
@@ -24,11 +40,24 @@ app.get("/health", async () => {
   };
 });
 
-await app.register(multipart, {
-  limits: {
-    fileSize: 10 * 1024 * 1024
+const PUBLIC_ROUTES = new Set(["POST /auth/login", "GET /health"]);
+
+app.addHook("preHandler", async (request, reply) => {
+  const key = `${request.method} ${request.routeOptions.url}`;
+  if (PUBLIC_ROUTES.has(key)) return;
+  const token = request.cookies?.[COOKIE_NAME];
+  if (!token || !verifySessionToken(token)) {
+    return reply.status(401).send({ message: "Não autenticado" });
   }
 });
+
+await app.register(multipart, {
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
+
+await app.register(authRoutes);
 await app.register(chatRoutes);
 await app.register(documentRoutes);
 await app.register(gitlabRoutes);

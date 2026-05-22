@@ -1,21 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import {
+  closeSessionBodySchema,
   createChatMessageSchema,
   createChatSessionSchema,
+  listMessagesQuerySchema,
+  projectParamsSchema,
+  sessionParamsSchema,
 } from "./chat.schemas.js";
 import { ChatService } from "./chat.service.js";
 
 const chatService = new ChatService();
 
+const INVALID_PARAMS = "Parâmetros inválidos";
+
 export async function chatRoutes(app: FastifyInstance) {
-  /**
-   * Cria uma nova sessão de chat.
-   * @route POST /chat/sessions
-   * @param {Object} request.body - Dados para criar a sessão (validado por createChatSessionSchema)
-   * @returns {Object} 201 - Sessão criada com sucesso
-   * @returns {Object} 400 - Payload inválido
-   * @returns {Object} 404 - Projeto não encontrado
-   */
   app.post("/chat/sessions", async (request, reply) => {
     const parsed = createChatSessionSchema.safeParse(request.body);
 
@@ -40,28 +38,32 @@ export async function chatRoutes(app: FastifyInstance) {
     }
   });
 
-  /**
-   * Lista todas as sessões de chat de um projeto.
-   * @route GET /projects/:projectId/chat/sessions
-   * @param {string} projectId - ID do projeto (parâmetro da URL)
-   * @returns {Array} Lista de sessões do projeto
-   */
-  app.get("/projects/:projectId/chat/sessions", async (request) => {
-    const { projectId } = request.params as { projectId: string };
-    return chatService.listSessionsByProject(projectId);
+  app.get("/projects/:projectId/chat/sessions", async (request, reply) => {
+    const parsedParams = projectParamsSchema.safeParse(request.params);
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
+    return chatService.listSessionsByProject(parsedParams.data.projectId);
   });
 
-  /**
-   * Obtém uma sessão de chat específica pelo ID.
-   * @route GET /chat/sessions/:sessionId
-   * @param {string} sessionId - ID da sessão (parâmetro da URL)
-   * @returns {Object} 200 - Sessão encontrada
-   * @returns {Object} 404 - Sessão não encontrada
-   */
   app.get("/chat/sessions/:sessionId", async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
+    const parsedParams = sessionParamsSchema.safeParse(request.params);
 
-    const session = await chatService.getSessionById(sessionId);
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
+    const session = await chatService.getSessionById(
+      parsedParams.data.sessionId,
+    );
 
     if (!session) {
       return reply.status(404).send({
@@ -72,18 +74,16 @@ export async function chatRoutes(app: FastifyInstance) {
     return session;
   });
 
-  /**
-   * Cria uma nova mensagem em uma sessão de chat.
-   * @route POST /chat/sessions/:sessionId/messages
-   * @param {string} sessionId - ID da sessão (parâmetro da URL)
-   * @param {Object} request.body - Dados da mensagem (validado por createChatMessageSchema)
-   * @returns {Object} 201 - Mensagem criada com sucesso
-   * @returns {Object} 400 - Payload inválido
-   * @returns {Object} 404 - Sessão não encontrada
-   * @returns {Object} 409 - Sessão não pertence ao projeto informado
-   */
   app.post("/chat/sessions/:sessionId/messages", async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
+    const parsedParams = sessionParamsSchema.safeParse(request.params);
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
     const parsed = createChatMessageSchema.safeParse(request.body);
 
     if (!parsed.success) {
@@ -94,7 +94,10 @@ export async function chatRoutes(app: FastifyInstance) {
     }
 
     try {
-      const message = await chatService.createMessage(sessionId, parsed.data);
+      const message = await chatService.createMessage(
+        parsedParams.data.sessionId,
+        parsed.data,
+      );
       return reply.status(201).send(message);
     } catch (error) {
       if (!(error instanceof Error)) {
@@ -117,28 +120,30 @@ export async function chatRoutes(app: FastifyInstance) {
     }
   });
 
-  /**
-   * Lista todas as mensagens de uma sessão de chat.
-   * @route GET /chat/sessions/:sessionId/messages
-   * @param {string} sessionId - ID da sessão (parâmetro da URL)
-   * @param {string} projectId - ID do projeto (parâmetro de query obrigatório)
-   * @returns {Array} 200 - Lista de mensagens
-   * @returns {Object} 400 - projectId é obrigatório
-   * @returns {Object} 404 - Sessão não encontrada
-   * @returns {Object} 409 - Sessão não pertence ao projeto informado
-   */
   app.get("/chat/sessions/:sessionId/messages", async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
-    const { projectId } = request.query as { projectId?: string };
+    const parsedParams = sessionParamsSchema.safeParse(request.params);
 
-    if (!projectId) {
+    if (!parsedParams.success) {
       return reply.status(400).send({
-        message: "projectId é obrigatório",
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
+    const parsedQuery = listMessagesQuerySchema.safeParse(request.query);
+
+    if (!parsedQuery.success) {
+      return reply.status(400).send({
+        message: INVALID_PARAMS,
+        issues: parsedQuery.error.flatten(),
       });
     }
 
     try {
-      const messages = await chatService.listMessages(sessionId, projectId);
+      const messages = await chatService.listMessages(
+        parsedParams.data.sessionId,
+        parsedQuery.data.projectId,
+      );
       return messages;
     } catch (error) {
       if (!(error instanceof Error)) {
@@ -161,28 +166,30 @@ export async function chatRoutes(app: FastifyInstance) {
     }
   });
 
-  /**
-   * Fecha uma sessão de chat.
-   * @route PATCH /chat/sessions/:sessionId/close
-   * @param {string} sessionId - ID da sessão (parâmetro da URL)
-   * @param {string} projectId - ID do projeto (no corpo da requisição, obrigatório)
-   * @returns {Object} 200 - Sessão fechada com sucesso
-   * @returns {Object} 400 - projectId é obrigatório
-   * @returns {Object} 404 - Sessão não encontrada
-   * @returns {Object} 409 - Sessão não pertence ao projeto informado
-   */
   app.patch("/chat/sessions/:sessionId/close", async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
-    const { projectId } = request.body as { projectId?: string };
+    const parsedParams = sessionParamsSchema.safeParse(request.params);
 
-    if (!projectId) {
+    if (!parsedParams.success) {
       return reply.status(400).send({
-        message: "projectId é obrigatório",
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
+    const parsedBody = closeSessionBodySchema.safeParse(request.body);
+
+    if (!parsedBody.success) {
+      return reply.status(400).send({
+        message: "Payload inválido",
+        issues: parsedBody.error.flatten(),
       });
     }
 
     try {
-      const session = await chatService.closeSession(sessionId, projectId);
+      const session = await chatService.closeSession(
+        parsedParams.data.sessionId,
+        parsedBody.data.projectId,
+      );
       return session;
     } catch (error) {
       if (!(error instanceof Error)) {

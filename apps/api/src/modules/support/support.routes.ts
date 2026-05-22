@@ -1,12 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import { SupportService } from "./support.service.js";
-import { askQuestionSchema } from "./support.schemas.js";
+import { askQuestionSchema, sessionParamsSchema } from "./support.schemas.js";
 
 const supportService = new SupportService();
 
 export async function supportRoutes(app: FastifyInstance) {
   app.post("/chat/sessions/:sessionId/ask", async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
+    const parsedParams = sessionParamsSchema.safeParse(request.params);
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: "Parâmetros inválidos",
+        issues: parsedParams.error.flatten(),
+      });
+    }
 
     const parsed = askQuestionSchema.safeParse(request.body);
 
@@ -19,7 +26,7 @@ export async function supportRoutes(app: FastifyInstance) {
 
     try {
       const result = await supportService.askQuestion({
-        sessionId,
+        sessionId: parsedParams.data.sessionId,
         projectId: parsed.data.projectId,
         question: parsed.data.question,
       });
@@ -45,11 +52,23 @@ export async function supportRoutes(app: FastifyInstance) {
   });
 
   app.post("/chat/sessions/:sessionId/ask/stream", async (request, reply) => {
-    const { sessionId } = request.params as { sessionId: string };
-    const requestOrigin =
-      typeof request.headers.origin === "string"
-        ? request.headers.origin
-        : "*";
+    const parsedParams = sessionParamsSchema.safeParse(request.params);
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: "Parâmetros inválidos",
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const requestOrigin = request.headers.origin ?? "";
+    const corsOrigin = allowedOrigins.includes(requestOrigin)
+      ? requestOrigin
+      : (allowedOrigins[0] ?? "");
 
     const parsed = askQuestionSchema.safeParse(request.body);
 
@@ -62,7 +81,8 @@ export async function supportRoutes(app: FastifyInstance) {
 
     reply.hijack();
     reply.raw.writeHead(200, {
-      "Access-Control-Allow-Origin": requestOrigin,
+      "Access-Control-Allow-Origin": corsOrigin,
+      "Access-Control-Allow-Credentials": "true",
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
@@ -83,7 +103,7 @@ export async function supportRoutes(app: FastifyInstance) {
     try {
       const result = await supportService.askQuestionStream(
         {
-          sessionId,
+          sessionId: parsedParams.data.sessionId,
           projectId: parsed.data.projectId,
           question: parsed.data.question,
         },

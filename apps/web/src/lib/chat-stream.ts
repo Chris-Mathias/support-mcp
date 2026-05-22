@@ -53,6 +53,7 @@ function parseSseChunk<TDone>(chunk: string) {
 export async function readSupportStream<TDone>(
   response: Response,
   onEvent: (event: SupportStreamEvent<TDone>) => void,
+  signal?: AbortSignal,
 ) {
   if (!response.ok) {
     throw new Error("STREAM_REQUEST_FAILED");
@@ -66,33 +67,36 @@ export async function readSupportStream<TDone>(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
+  try {
+    while (true) {
+      if (signal?.aborted) break;
 
-    if (done) {
-      break;
-    }
+      const { done, value } = await reader.read();
 
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
+      if (done) break;
 
-    for (const chunk of chunks) {
-      const parsed = parseSseChunk<TDone>(chunk);
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() ?? "";
 
-      if (parsed) {
-        onEvent(parsed);
+      for (const chunk of chunks) {
+        if (signal?.aborted) break;
+        const parsed = parseSseChunk<TDone>(chunk);
+        if (parsed) onEvent(parsed);
       }
     }
-  }
 
-  buffer += decoder.decode();
-
-  if (buffer.trim()) {
-    const parsed = parseSseChunk<TDone>(buffer);
-
-    if (parsed) {
-      onEvent(parsed);
+    if (!signal?.aborted) {
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const parsed = parseSseChunk<TDone>(buffer);
+        if (parsed) onEvent(parsed);
+      }
     }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    throw error;
+  } finally {
+    reader.cancel();
   }
 }

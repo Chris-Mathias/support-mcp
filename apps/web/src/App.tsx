@@ -9,10 +9,13 @@ import { AppHeader } from "./components/app/AppHeader";
 import { ChatPage } from "./pages/ChatPage";
 import { DocumentsPage } from "./pages/DocumentPage";
 import { GitlabIntegrationPage } from "./pages/GitlabIntegrationPage";
+import { LoginPage } from "./pages/LoginPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { api } from "./services/api";
 
 type Tab = "chat" | "projects" | "documents" | "gitlab";
 type Theme = "light" | "dark";
+type AuthState = "loading" | "authenticated" | "unauthenticated";
 
 const navItems = [
   { id: "chat", label: "Suporte", icon: MessageSquare },
@@ -22,6 +25,7 @@ const navItems = [
 ] as const;
 
 export function App() {
+  const [authState, setAuthState] = useState<AuthState>("loading");
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [theme, setTheme] = useState<Theme>(() =>
     localStorage.getItem("theme") === "dark" ? "dark" : "light",
@@ -29,14 +33,47 @@ export function App() {
 
   const isDark = theme === "dark";
 
-  function toggleTheme() {
-    setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
-  }
-
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
     localStorage.setItem("theme", theme);
   }, [theme, isDark]);
+
+  useEffect(() => {
+    api
+      .get("/auth/me")
+      .then(() => setAuthState("authenticated"))
+      .catch(() => setAuthState("unauthenticated"));
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setAuthState("unauthenticated");
+    window.addEventListener("auth:unauthenticated", handler);
+    return () => window.removeEventListener("auth:unauthenticated", handler);
+  }, []);
+
+  function toggleTheme() {
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
+  }
+
+  async function handleLogout() {
+    try {
+      await api.post("/auth/logout");
+    } finally {
+      setAuthState("unauthenticated");
+    }
+  }
+
+  if (authState === "loading") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700 dark:border-zinc-700 dark:border-t-zinc-300" />
+      </div>
+    );
+  }
+
+  if (authState === "unauthenticated") {
+    return <LoginPage onSuccess={() => setAuthState("authenticated")} />;
+  }
 
   return (
     <div className="flex h-screen flex-col bg-zinc-50 font-sans text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
@@ -46,6 +83,7 @@ export function App() {
         isDark={isDark}
         onChangeTab={setActiveTab}
         onToggleTheme={toggleTheme}
+        onLogout={handleLogout}
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">

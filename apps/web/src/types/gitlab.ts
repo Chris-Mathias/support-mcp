@@ -4,7 +4,7 @@ export type GitlabIntegration = {
   repoUrl: string;
   projectPath: string;
   branch: string;
-  token: string;
+  tokenConfigured: boolean;
   createdAt: string;
 };
 

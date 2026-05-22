@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createProjectSchema } from "./project.schemas.js";
+import { createProjectSchema, projectIdParamsSchema } from "./project.schemas.js";
 import { ProjectService } from "./project.service.js";
 
 const projectService = new ProjectService();
@@ -25,9 +25,16 @@ export async function projectRoutes(app: FastifyInstance) {
   });
 
   app.get("/projects/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const parsedParams = projectIdParamsSchema.safeParse(request.params);
 
-    const project = await projectService.getById(id);
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: "Parâmetros inválidos",
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
+    const project = await projectService.getById(parsedParams.data.id);
 
     if (!project) {
       return reply.status(404).send({
