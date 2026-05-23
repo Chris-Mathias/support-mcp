@@ -41,12 +41,15 @@ export async function authRoutes(app: FastifyInstance) {
 
     const token = createSessionToken();
 
+    const proto = request.headers["x-forwarded-proto"];
+    const isHttps = proto === "https" || (Array.isArray(proto) && proto[0] === "https");
+
     reply.setCookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "strict",
       path: "/",
       maxAge: MAX_AGE_SECONDS,
-      secure: process.env.NODE_ENV === "production",
+      secure: isHttps,
     });
 
     return reply.send({ ok: true });
