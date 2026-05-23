@@ -3,6 +3,7 @@ import {
   closeSessionBodySchema,
   createChatMessageSchema,
   createChatSessionSchema,
+  deleteSessionBodySchema,
   listMessagesQuerySchema,
   projectParamsSchema,
   sessionParamsSchema,
@@ -154,6 +155,48 @@ export async function chatRoutes(app: FastifyInstance) {
         return reply.status(404).send({
           message: "Sessão não encontrada",
         });
+      }
+
+      if (error.message === "PROJECT_SESSION_MISMATCH") {
+        return reply.status(409).send({
+          message: "A sessão informada não pertence ao projeto informado",
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  app.delete("/chat/sessions/:sessionId", async (request, reply) => {
+    const parsedParams = sessionParamsSchema.safeParse(request.params);
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: INVALID_PARAMS,
+        issues: parsedParams.error.flatten(),
+      });
+    }
+
+    const parsedBody = deleteSessionBodySchema.safeParse(request.body);
+
+    if (!parsedBody.success) {
+      return reply.status(400).send({
+        message: "Payload inválido",
+        issues: parsedBody.error.flatten(),
+      });
+    }
+
+    try {
+      await chatService.deleteSession(
+        parsedParams.data.sessionId,
+        parsedBody.data.projectId,
+      );
+      return reply.status(204).send();
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+
+      if (error.message === "SESSION_NOT_FOUND") {
+        return reply.status(404).send({ message: "Sessão não encontrada" });
       }
 
       if (error.message === "PROJECT_SESSION_MISMATCH") {

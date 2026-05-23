@@ -1,7 +1,10 @@
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const uploadsRoot = path.resolve(process.cwd(), "../../uploads");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsRoot =
+  process.env.UPLOADS_DIR ?? path.resolve(__dirname, "../../../../uploads");
 
 export function getUploadsRoot() {
   return uploadsRoot;

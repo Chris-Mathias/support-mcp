@@ -4,6 +4,7 @@ import { ChatMessageList } from "../components/chat/ChatMessageList";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { WorkspacePage } from "../components/layout/WorkspacePage";
 import { AlertBanner } from "../components/ui/AlertBanner";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { readSupportStream } from "../lib/chat-stream";
 import { api } from "../services/api";
 import type { ChatMessage, ChatSession } from "../types/chat";
@@ -37,6 +38,10 @@ export function ChatPage() {
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(
     null,
   );
+  const [deletingSession, setDeletingSession] = useState<ChatSession | null>(
+    null,
+  );
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -384,13 +389,45 @@ export function ChatPage() {
         setMessages([]);
       }
     } catch {
-      setError("Não foi possível excluir a sessão.");
+      setError("Não foi possível fechar a sessão.");
     } finally {
       setOpenMenuSessionId(null);
     }
   }
 
+  async function handleDeleteSession() {
+    if (!selectedProjectId || !deletingSession) return;
+
+    if (activeSession?.id === deletingSession.id) {
+      abortActiveStream();
+    }
+
+    setIsDeletingSession(true);
+    setError(null);
+
+    try {
+      await api.delete(`/chat/sessions/${deletingSession.id}`, {
+        data: { projectId: selectedProjectId },
+      });
+
+      setSessions((current) =>
+        current.filter((session) => session.id !== deletingSession.id),
+      );
+
+      if (activeSession?.id === deletingSession.id) {
+        setActiveSession(null);
+        setMessages([]);
+      }
+    } catch {
+      setError("Não foi possível excluir a conversa.");
+    } finally {
+      setIsDeletingSession(false);
+      setDeletingSession(null);
+    }
+  }
+
   return (
+    <>
     <WorkspacePage
       sidebar={
         <ChatSidebar
@@ -404,7 +441,7 @@ export function ChatPage() {
           onChangeProject={handleChangeProject}
           onStartSession={handleStartSession}
           onSelectSession={handleSelectSession}
-          onCloseSession={handleCloseSession}
+          onRequestDeleteSession={(session) => setDeletingSession(session)}
           onToggleSessionMenu={(sessionId) =>
             setOpenMenuSessionId((current) =>
               current === sessionId ? null : sessionId,
@@ -435,5 +472,16 @@ export function ChatPage() {
         onSubmit={handleSendMessage}
       />
     </WorkspacePage>
+
+    {deletingSession ? (
+      <ConfirmDialog
+        title="Excluir conversa?"
+        description={`"${deletingSession.title ?? `Sessão ${deletingSession.id.slice(0, 8)}`}" será movida para a lixeira e removida permanentemente após 30 dias.`}
+        loading={isDeletingSession}
+        onConfirm={handleDeleteSession}
+        onCancel={() => setDeletingSession(null)}
+      />
+    ) : null}
+    </>
   );
 }

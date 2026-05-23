@@ -4,6 +4,7 @@ export type ChatSession = {
   title: string | null;
   createdAt: string;
   closedAt?: string | null;
+  deletedAt?: string | null;
 };
 
 export type ChatMessage = {

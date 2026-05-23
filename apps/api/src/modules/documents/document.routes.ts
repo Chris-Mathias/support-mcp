@@ -30,6 +30,15 @@ export async function documentRoutes(app: FastifyInstance) {
 
     const buffer = await file.toBuffer();
 
+    const isValidMime = file.mimetype === "application/pdf";
+    const isValidExt = file.filename.toLowerCase().endsWith(".pdf");
+
+    if (!isValidMime || !isValidExt) {
+      return reply.status(415).send({
+        message: "Apenas arquivos PDF são aceitos",
+      });
+    }
+
     try {
       const document = await documentService.create({
         projectId: parsedParams.data.projectId,

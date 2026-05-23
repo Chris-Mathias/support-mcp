@@ -16,6 +16,10 @@ export const closeSessionBodySchema = z.object({
   projectId: z.string().min(1, "projectId é obrigatório"),
 });
 
+export const deleteSessionBodySchema = z.object({
+  projectId: z.string().min(1, "projectId é obrigatório"),
+});
+
 export const createChatSessionSchema = z.object({
   projectId: z.string().min(1, "projectId é obrigatório"),
 });

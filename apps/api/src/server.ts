@@ -4,6 +4,7 @@ import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import { chatRoutes } from "./modules/chat/chat.routes.js";
+import { ChatService } from "./modules/chat/chat.service.js";
 import { documentRoutes } from "./modules/documents/document.routes.js";
 import { gitlabRoutes } from "./modules/gitlab/gitlab.routes.js";
 import { projectRoutes } from "./modules/projects/project.routes.js";
@@ -65,6 +66,20 @@ await app.register(projectRoutes);
 await app.register(supportRoutes);
 
 const port = Number(process.env.PORT || 3333);
+const retentionDays = Number(process.env.SESSION_RETENTION_DAYS ?? 30);
+const chatService = new ChatService();
+
+chatService.purgeExpiredSessions(retentionDays).catch((err) => {
+  app.log.warn({ err }, "Failed to purge expired chat sessions on startup");
+});
+setInterval(
+  () => {
+    chatService.purgeExpiredSessions(retentionDays).catch((err) => {
+      app.log.warn({ err }, "Failed to purge expired chat sessions");
+    });
+  },
+  24 * 60 * 60 * 1000,
+);
 
 app
   .listen({ port, host: "0.0.0.0" })

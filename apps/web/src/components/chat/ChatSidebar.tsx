@@ -15,7 +15,7 @@ type ChatSidebarProps = {
   onChangeProject: (projectId: string) => void;
   onStartSession: () => void;
   onSelectSession: (session: ChatSession) => void;
-  onCloseSession: (sessionId: string) => void;
+  onRequestDeleteSession: (session: ChatSession) => void;
   onToggleSessionMenu: (sessionId: string) => void;
 };
 
@@ -30,7 +30,7 @@ export function ChatSidebar({
   onChangeProject,
   onStartSession,
   onSelectSession,
-  onCloseSession,
+  onRequestDeleteSession,
   onToggleSessionMenu,
 }: ChatSidebarProps) {
   return (
@@ -134,11 +134,14 @@ export function ChatSidebar({
                           <button
                             type="button"
                             role="menuitem"
-                            onClick={() => onCloseSession(session.id)}
+                            onClick={() => {
+                              onToggleSessionMenu(session.id);
+                              onRequestDeleteSession(session);
+                            }}
                             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-zinc-500 dark:text-red-400 dark:hover:bg-red-950/40"
                           >
                             <Trash2 size={15} />
-                            Excluir chat
+                            Excluir conversa
                           </button>
                         </div>
                       ) : null}

@@ -30,6 +30,7 @@ export class ChatService {
         projectId,
         messages: { some: {} },
         closedAt: null,
+        deletedAt: null,
       },
       orderBy: { createdAt: "desc" },
       include: {
@@ -95,6 +96,36 @@ export class ChatService {
     return prisma.chatMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async deleteSession(sessionId: string, projectId: string) {
+    const session = await prisma.chatSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error("SESSION_NOT_FOUND");
+    }
+
+    if (session.projectId !== projectId) {
+      throw new Error("PROJECT_SESSION_MISMATCH");
+    }
+
+    return prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async purgeExpiredSessions(retentionDays: number) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
+    await prisma.chatSession.deleteMany({
+      where: {
+        deletedAt: { lt: cutoff },
+      },
     });
   }
 

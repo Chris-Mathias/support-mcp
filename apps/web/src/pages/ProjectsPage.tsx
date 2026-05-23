@@ -3,7 +3,6 @@ import {
   Calendar,
   FolderKanban,
   FolderPlus,
-  Hash,
   Info,
 } from "lucide-react";
 import { WorkspacePage } from "../components/layout/WorkspacePage";
@@ -176,16 +175,6 @@ export function ProjectsPage() {
                       />
                       <span className="line-clamp-2">
                         {project.description || "Sem descrição"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Hash
-                        size={16}
-                        className="text-zinc-400 dark:text-zinc-500"
-                      />
-                      <span className="truncate" title={project.projectId}>
-                        Proj ID: {project.projectId}
                       </span>
                     </div>
 

@@ -9,7 +9,6 @@ datasource db {
 
 model Project {
   id          String   @id @default(cuid())
-  projectId   String   @unique
   name        String
   description String?
   createdAt   DateTime @default(now())
@@ -21,11 +20,12 @@ model Project {
 }
 
 model ChatSession {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   projectId String
   title     String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   closedAt  DateTime?
+  deletedAt DateTime?
 
   project   Project  @relation(fields: [projectId], references: [id])
   messages  ChatMessage[]
@@ -38,7 +38,7 @@ model ChatMessage {
   content   String
   createdAt DateTime @default(now())
 
-  session   ChatSession @relation(fields: [sessionId], references: [id])
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 model GitlabIntegration {
