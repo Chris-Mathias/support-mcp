@@ -1,0 +1,37 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV:               production
+      DATABASE_URL:           ${DATABASE_URL}
+      LLM_API_KEY:            ${LLM_API_KEY}
+      LLM_MODEL:              ${LLM_MODEL}
+      LLM_TITLE_MODEL:        ${LLM_TITLE_MODEL}
+      ENCRYPTION_KEY:         ${ENCRYPTION_KEY}
+      SESSION_SECRET:         ${SESSION_SECRET}
+      APP_PASSWORD:           ${APP_PASSWORD}
+      UPLOADS_DIR:            /uploads
+      ALLOWED_ORIGINS:        ${ALLOWED_ORIGINS}
+      SESSION_RETENTION_DAYS: ${SESSION_RETENTION_DAYS:-30}
+      RATE_LIMIT_GLOBAL:      ${RATE_LIMIT_GLOBAL:-60}
+      RATE_LIMIT_LLM:         ${RATE_LIMIT_LLM:-15}
+      RATE_LIMIT_UPLOAD:      ${RATE_LIMIT_UPLOAD:-5}
+      RATE_LIMIT_WINDOW:      ${RATE_LIMIT_WINDOW:-1m}
+    volumes:
+      - uploads:/uploads
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - api
+
+volumes:
+  uploads:

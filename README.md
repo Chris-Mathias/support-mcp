@@ -77,8 +77,11 @@ O fluxo principal é:
 │   ├── api/          # API Fastify
 │   ├── mcp-server/   # Servidor MCP com ferramentas
 │   └── web/          # Frontend React/Vite
+├── docs/
+│   └── deploy/       # Guias de deploy (gitignored)
 ├── infra/
-│   └── docker-compose.yml
+│   ├── compose/      # docker-compose: dev.yml, prod.yml, coolify.yml
+│   └── docker/       # Dockerfiles, entrypoint.sh, nginx.conf
 ├── prisma/
 │   ├── schema.prisma
 │   └── migrations/
@@ -126,7 +129,7 @@ Observações:
 ## Subindo o Banco
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/compose/dev.yml up -d
 ```
 
 O `docker-compose` sobe um PostgreSQL 16 com:

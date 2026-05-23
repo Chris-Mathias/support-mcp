@@ -1,0 +1,12 @@
+node_modules
+.git
+**/.git
+**/dist
+coverage
+uploads
+.env
+.env.*
+!.env.example
+.claude
+*.log
+.nyc_output
