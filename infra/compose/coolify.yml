@@ -1,7 +1,7 @@
 services:
   api:
     build:
-      context: ../..
+      context: .
       dockerfile: infra/docker/api.Dockerfile
     restart: unless-stopped
     environment:
@@ -25,7 +25,7 @@ services:
 
   web:
     build:
-      context: ../..
+      context: .
       dockerfile: infra/docker/web.Dockerfile
       args:
         VITE_API_URL: /api
