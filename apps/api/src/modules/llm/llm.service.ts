@@ -68,6 +68,7 @@ export class LlmService {
   async generateSupportAnswerWithTools(params: {
     messages: ChatMessageInput[];
     tools: ToolRuntime;
+    logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
   } & SupportAnswerHandlers) {
     const toolHistory: ToolCallRecord[] = [];
 
@@ -102,8 +103,7 @@ export class LlmService {
       for (const call of functionCalls) {
         const parsedArgs = safeJsonParse(call.arguments);
 
-        console.log(`\n[Passo ${step}] LLM chamou a ferramenta: ${call.name}`);
-        console.log(`[Passo ${step}] Argumentos enviados:`, parsedArgs);
+        params.logger?.debug({ step, tool: call.name, args: parsedArgs }, "llm tool call");
         params.onToolCall?.({
           step,
           tool: call.name,
@@ -116,10 +116,7 @@ export class LlmService {
           parsedArgs,
         );
 
-        console.log(
-          `[Passo ${step}] Resposta da ferramenta (preview):`,
-          output.slice(0, 300),
-        );
+        params.logger?.debug({ step, tool: call.name, preview: output.slice(0, 300) }, "llm tool result");
 
         toolHistory.push({
           tool: call.name,

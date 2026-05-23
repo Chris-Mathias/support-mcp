@@ -9,6 +9,7 @@ import { WorkspacePage } from "../components/layout/WorkspacePage";
 import { AlertBanner } from "../components/ui/AlertBanner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
+import { getApiErrorMessage } from "../lib/errors";
 import { formatDate } from "../lib/format";
 import { api } from "../services/api";
 import type { Project } from "../types/project";
@@ -21,8 +22,8 @@ export function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadProjects().catch(() =>
-      setError("Não foi possível carregar os projetos."),
+    loadProjects().catch((error) =>
+      setError(getApiErrorMessage(error, "Não foi possível carregar os projetos.")),
     );
   }, []);
 
@@ -44,8 +45,8 @@ export function ProjectsPage() {
       setName("");
       setDescription("");
       await loadProjects();
-    } catch {
-      setError("Não foi possível criar o projeto.");
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Não foi possível criar o projeto."));
     } finally {
       setLoading(false);
     }

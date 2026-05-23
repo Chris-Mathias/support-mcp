@@ -6,6 +6,7 @@ type AskQuestionParams = {
   sessionId: string;
   projectId: string;
   question: string;
+  logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
 };
 
 type AskQuestionStreamHandlers = {
@@ -77,6 +78,7 @@ export class SupportService {
             content: msg.content,
           })),
           tools,
+          logger: params.logger,
           onTextDelta: handlers?.onTextDelta,
           onToolCall: handlers?.onToolCall,
           onToolResult: handlers?.onToolResult,

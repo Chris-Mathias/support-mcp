@@ -11,6 +11,7 @@ import { AlertBanner } from "../components/ui/AlertBanner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
 import { ProjectSelect } from "../components/ui/ProjectSelect";
+import { getApiErrorMessage } from "../lib/errors";
 import { formatDate, formatFileSize } from "../lib/format";
 import { api } from "../services/api";
 import type { ProjectDocument } from "../types/document";
@@ -28,7 +29,7 @@ export function DocumentsPage() {
     api
       .get<Project[]>("/projects")
       .then((res) => setProjects(res.data))
-      .catch(() => setError("Não foi possível carregar os projetos."));
+      .catch((error) => setError(getApiErrorMessage(error, "Não foi possível carregar os projetos.")));
   }, []);
 
   async function loadDocuments(projectId: string) {
@@ -48,8 +49,8 @@ export function DocumentsPage() {
 
     try {
       await loadDocuments(projectId);
-    } catch {
-      setError("Não foi possível carregar os documentos.");
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Não foi possível carregar os documentos."));
     }
   }
 
@@ -73,8 +74,8 @@ export function DocumentsPage() {
 
       setSelectedFile(null);
       await loadDocuments(selectedProjectId);
-    } catch {
-      setError("Não foi possível enviar o documento.");
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Não foi possível enviar o documento."));
     } finally {
       setLoading(false);
     }
@@ -86,8 +87,8 @@ export function DocumentsPage() {
     try {
       await api.delete(`/projects/${selectedProjectId}/documents/${documentId}`);
       await loadDocuments(selectedProjectId);
-    } catch {
-      setError("Não foi possível excluir o documento.");
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Não foi possível excluir o documento."));
     }
   }
 
@@ -212,9 +213,9 @@ export function DocumentsPage() {
                       </div>
 
                       <p className="mt-3 line-clamp-2 rounded-lg bg-zinc-50 p-2 text-sm italic text-zinc-600 dark:bg-zinc-950 dark:text-zinc-400">
-                        {document.extractedText
-                          ? `"${document.extractedText}"`
-                          : "Sem texto extraído."}
+                        {document.summary
+                          ? `"${document.summary}"`
+                          : "Sem resumo disponível."}
                       </p>
                     </div>
 

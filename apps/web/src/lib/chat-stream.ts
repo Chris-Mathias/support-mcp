@@ -44,10 +44,14 @@ function parseSseChunk<TDone>(chunk: string) {
     return null;
   }
 
-  return {
-    event,
-    data: JSON.parse(dataLines.join("\n")),
-  } as SupportStreamEvent<TDone>;
+  try {
+    return {
+      event,
+      data: JSON.parse(dataLines.join("\n")),
+    } as SupportStreamEvent<TDone>;
+  } catch {
+    return null;
+  }
 }
 
 export async function readSupportStream<TDone>(

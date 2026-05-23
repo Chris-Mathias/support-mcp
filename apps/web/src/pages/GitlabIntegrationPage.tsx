@@ -13,6 +13,7 @@ import { AlertBanner } from "../components/ui/AlertBanner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
 import { ProjectSelect } from "../components/ui/ProjectSelect";
+import { getApiErrorMessage } from "../lib/errors";
 import { cn } from "../lib/cn";
 import { api } from "../services/api";
 import type {
@@ -54,7 +55,7 @@ export function GitlabIntegrationPage() {
     api
       .get<Project[]>("/projects")
       .then((response) => setProjects(response.data))
-      .catch(() => setError("Não foi possível carregar os projetos."))
+      .catch((error) => setError(getApiErrorMessage(error, "Não foi possível carregar os projetos.")))
       .finally(() => setLoadingProjects(false));
   }, []);
 
@@ -115,8 +116,8 @@ export function GitlabIntegrationPage() {
       );
       setIntegration(response.data);
       setToken("");
-    } catch {
-      setError("Não foi possível salvar a integração.");
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Não foi possível salvar a integração."));
     } finally {
       setSavingIntegration(false);
     }
@@ -137,8 +138,8 @@ export function GitlabIntegrationPage() {
         { params: { path } },
       );
       setFiles(response.data);
-    } catch {
-      setError("Não foi possível listar arquivos.");
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Não foi possível listar arquivos."));
     } finally {
       setLoadingFiles(false);
     }
@@ -157,8 +158,8 @@ export function GitlabIntegrationPage() {
         { params: { filePath } },
       );
       setFileContent(response.data);
-    } catch {
-      setError("Não foi possível carregar o conteúdo do arquivo.");
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Não foi possível carregar o conteúdo do arquivo."));
     } finally {
       setLoadingFileContent(false);
     }

@@ -2,10 +2,17 @@ import type { FastifyInstance } from "fastify";
 import { SupportService } from "./support.service.js";
 import { askQuestionSchema, sessionParamsSchema } from "./support.schemas.js";
 
+type SupportRouteOptions = {
+  rateLimitLlm: number;
+  rateLimitWindow: string;
+};
+
 const supportService = new SupportService();
 
-export async function supportRoutes(app: FastifyInstance) {
-  app.post("/chat/sessions/:sessionId/ask", async (request, reply) => {
+export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOptions) {
+  const llmRateLimit = { max: opts.rateLimitLlm, timeWindow: opts.rateLimitWindow };
+
+  app.post("/chat/sessions/:sessionId/ask", { config: { rateLimit: llmRateLimit } }, async (request, reply) => {
     const parsedParams = sessionParamsSchema.safeParse(request.params);
 
     if (!parsedParams.success) {
@@ -51,7 +58,7 @@ export async function supportRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post("/chat/sessions/:sessionId/ask/stream", async (request, reply) => {
+  app.post("/chat/sessions/:sessionId/ask/stream", { config: { rateLimit: llmRateLimit } }, async (request, reply) => {
     const parsedParams = sessionParamsSchema.safeParse(request.params);
 
     if (!parsedParams.success) {
@@ -106,6 +113,7 @@ export async function supportRoutes(app: FastifyInstance) {
           sessionId: parsedParams.data.sessionId,
           projectId: parsed.data.projectId,
           question: parsed.data.question,
+          logger: request.log,
         },
         {
           onTextDelta(delta, content) {

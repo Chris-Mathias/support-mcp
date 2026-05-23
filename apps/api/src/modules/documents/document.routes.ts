@@ -5,12 +5,17 @@ import {
 } from "./document.schemas.js";
 import { DocumentService } from "./document.service.js";
 
+type DocumentRouteOptions = {
+  rateLimitUpload: number;
+  rateLimitWindow: string;
+};
+
 const documentService = new DocumentService();
 
 const INVALID_PARAMS = "Parâmetros inválidos";
 
-export async function documentRoutes(app: FastifyInstance) {
-  app.post("/projects/:projectId/documents", async (request, reply) => {
+export async function documentRoutes(app: FastifyInstance, opts: DocumentRouteOptions) {
+  app.post("/projects/:projectId/documents", { config: { rateLimit: { max: opts.rateLimitUpload, timeWindow: opts.rateLimitWindow } } }, async (request, reply) => {
     const parsedParams = projectParamsSchema.safeParse(request.params);
 
     if (!parsedParams.success) {

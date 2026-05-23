@@ -71,10 +71,8 @@ export function ChatPage() {
   useEffect(() => {
     loadProjects()
       .then(() => {
-        const storedProjectId = localStorage.getItem(selectedProjectStorageKey);
-
-        if (storedProjectId) {
-          loadSessions(storedProjectId);
+        if (selectedProjectId) {
+          loadSessions(selectedProjectId);
         }
       })
       .catch(() => {

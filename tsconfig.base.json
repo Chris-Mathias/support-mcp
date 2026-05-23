@@ -6,7 +6,6 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "baseUrl": "."
+    "esModuleInterop": true
   }
 }

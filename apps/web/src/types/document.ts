@@ -6,5 +6,6 @@ export type ProjectDocument = {
   mimeType?: string | null;
   fileSize?: number | null;
   extractedText?: string | null;
+  summary?: string | null;
   createdAt: string;
 };
