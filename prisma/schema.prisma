@@ -100,3 +100,12 @@ enum DocumentProcessingStatus {
   FAILED
   UNSUPPORTED
 }
+
+model Session {
+  id         String   @id
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+
+  @@index([expiresAt])
+}

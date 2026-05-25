@@ -3,11 +3,20 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { authRoutes } from '../../../modules/auth/auth.routes.js';
 
+vi.mock('../../../lib/prisma.js', () => ({
+  prisma: {
+    session: {
+      create:     vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({}),
+    },
+  },
+}));
+
 const app = Fastify({ logger: false });
 
 beforeAll(async () => {
   await app.register(cookie);
-  await app.register(authRoutes);
+  await app.register(authRoutes, { rateLimitLogin: 5, rateLimitLoginWindow: "15m" });
   await app.ready();
 });
 
@@ -19,6 +28,24 @@ describe('POST /auth/login', () => {
     const res = await app.inject({ method: 'POST', url: '/auth/login', body: { password: 'test-password' } });
     expect(res.statusCode).toBe(200);
     expect(res.headers['set-cookie']).toMatch(/session=/);
+  });
+
+  it('sets Secure flag on cookie when NODE_ENV=production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const res = await app.inject({ method: 'POST', url: '/auth/login', body: { password: 'test-password' } });
+    expect(res.statusCode).toBe(200);
+    const cookie = res.headers['set-cookie'];
+    const cookieStr = Array.isArray(cookie) ? cookie.join(';') : cookie ?? '';
+    expect(cookieStr).toMatch(/Secure/);
+  });
+
+  it('omits Secure flag on cookie outside production', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const res = await app.inject({ method: 'POST', url: '/auth/login', body: { password: 'test-password' } });
+    expect(res.statusCode).toBe(200);
+    const cookie = res.headers['set-cookie'];
+    const cookieStr = Array.isArray(cookie) ? cookie.join(';') : cookie ?? '';
+    expect(cookieStr).not.toMatch(/Secure/);
   });
 
   it('returns 401 with wrong password', async () => {

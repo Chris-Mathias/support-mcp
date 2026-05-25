@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
 import {
   FileText,
   FolderKanban,
@@ -42,7 +43,10 @@ export function App() {
     api
       .get("/auth/me")
       .then(() => setAuthState("authenticated"))
-      .catch(() => setAuthState("unauthenticated"));
+      .catch((err) => {
+        const is401 = axios.isAxiosError(err) && err.response?.status === 401;
+        setAuthState(is401 ? "unauthenticated" : "authenticated");
+      });
   }, []);
 
   useEffect(() => {

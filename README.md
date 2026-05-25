@@ -33,7 +33,7 @@ Assistente de suporte técnico orientado a projeto. Cada projeto tem sua própri
 
 ## Dev local
 
-**Pré-requisitos:** Node 20+, npm 10+, Docker
+**Pré-requisitos:** Node 22+, npm 10+, Docker
 
 **1. Suba o banco**
 

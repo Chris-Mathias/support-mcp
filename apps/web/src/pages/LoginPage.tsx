@@ -21,13 +21,17 @@ export function LoginPage({ onSuccess }: Props) {
       await api.post("/auth/login", { password });
       onSuccess();
     } catch (err: unknown) {
-      if (
+      const status =
         err &&
         typeof err === "object" &&
-        "response" in err &&
-        (err as { response?: { status?: number } }).response?.status === 401
-      ) {
+        "response" in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : undefined;
+
+      if (status === 401) {
         setError("Senha incorreta.");
+      } else if (status === 429) {
+        setError("Muitas tentativas incorretas. Aguarde 5 minutos para tentar novamente.");
       } else {
         setError("Não foi possível autenticar. Tente novamente.");
       }
