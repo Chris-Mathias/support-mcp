@@ -107,6 +107,7 @@ await app.register(projectRoutes);
 await app.register(supportRoutes, {
   rateLimitLlm: rateLimitConfig.llm,
   rateLimitWindow: rateLimitConfig.window,
+  allowedOrigins,
 });
 
 const port = Number(process.env.PORT || 3333);

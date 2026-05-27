@@ -5,12 +5,14 @@ import { askQuestionSchema, sessionParamsSchema } from "./support.schemas.js";
 type SupportRouteOptions = {
   rateLimitLlm: number;
   rateLimitWindow: string;
+  allowedOrigins: Set<string>;
 };
 
 const supportService = new SupportService();
 
 export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOptions) {
   const llmRateLimit = { max: opts.rateLimitLlm, timeWindow: opts.rateLimitWindow };
+  const { allowedOrigins } = opts;
 
   app.post("/chat/sessions/:sessionId/ask", { config: { rateLimit: llmRateLimit } }, async (request, reply) => {
     const parsedParams = sessionParamsSchema.safeParse(request.params);
@@ -68,14 +70,10 @@ export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOpti
       });
     }
 
-    const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
     const requestOrigin = request.headers.origin ?? "";
-    const corsOrigin = allowedOrigins.includes(requestOrigin)
-      ? requestOrigin
-      : (allowedOrigins[0] ?? "");
+    if (!allowedOrigins.has(requestOrigin)) {
+      return reply.status(403).send({ message: "Origem não permitida" });
+    }
 
     const parsed = askQuestionSchema.safeParse(request.body);
 
@@ -88,7 +86,7 @@ export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOpti
 
     reply.hijack();
     reply.raw.writeHead(200, {
-      "Access-Control-Allow-Origin": corsOrigin,
+      "Access-Control-Allow-Origin": requestOrigin,
       "Access-Control-Allow-Credentials": "true",
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
