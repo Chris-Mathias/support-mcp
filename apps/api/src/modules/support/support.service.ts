@@ -41,8 +41,8 @@ export class SupportService {
     params: AskQuestionParams,
     handlers?: AskQuestionStreamHandlers,
   ) {
-    const session = await prisma.chatSession.findUnique({
-      where: { id: params.sessionId },
+    const session = await prisma.chatSession.findFirst({
+      where: { id: params.sessionId, deletedAt: null },
     });
 
     if (!session) {
@@ -53,30 +53,26 @@ export class SupportService {
       throw new Error("PROJECT_SESSION_MISMATCH");
     }
 
-    await prisma.chatMessage.create({
-      data: {
-        sessionId: session.id,
-        role: "user",
-        content: params.question,
-      },
-    });
-
-    const messages = await prisma.chatMessage.findMany({
+    const history = await prisma.chatMessage.findMany({
       where: { sessionId: session.id },
       orderBy: { createdAt: "desc" },
-      take: 12,
+      take: 11,
     });
 
-    const orderedMessages = messages.reverse();
+    const messagesForLlm = [
+      ...history.reverse().map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      })),
+      { role: "user" as const, content: params.question },
+    ];
 
+    // If the LLM throws here nothing has been written to the DB yet.
     const { answer, toolHistory } = await withProjectScopedMcpTools(
       { projectId: params.projectId },
       async (tools) => {
         return this.llmService.generateSupportAnswerWithTools({
-          messages: orderedMessages.map((msg) => ({
-            role: msg.role as "user" | "assistant",
-            content: msg.content,
-          })),
+          messages: messagesForLlm,
           tools,
           logger: params.logger,
           onTextDelta: handlers?.onTextDelta,
@@ -86,34 +82,28 @@ export class SupportService {
       },
     );
 
-    const shouldGenerateTitle = !session.title;
-
-    const generatedTitle = shouldGenerateTitle
-      ? await this.llmService.generateChatTitle({
-          question: params.question,
-          answer: answer,
-        })
+    // Title generation is best-effort: failure must not prevent message persistence.
+    const generatedTitle = !session.title
+      ? await this.llmService.generateChatTitle({ question: params.question, answer }).catch(() => null)
       : null;
 
-    const updatedSession = generatedTitle
-      ? await prisma.chatSession.update({
-          where: { id: session.id },
-          data: {
-            title: generatedTitle,
-          },
-        })
-      : session;
-
-    const assistantMessage = await prisma.chatMessage.create({
-      data: {
-        sessionId: session.id,
-        role: "assistant",
-        content: answer,
-      },
+    // Persist user message + assistant message + optional title update atomically.
+    const { userMessage, assistantMessage, updatedSession } = await prisma.$transaction(async (tx) => {
+      const userMessage = await tx.chatMessage.create({
+        data: { sessionId: session.id, role: "user", content: params.question },
+      });
+      const assistantMessage = await tx.chatMessage.create({
+        data: { sessionId: session.id, role: "assistant", content: answer },
+      });
+      const updatedSession = generatedTitle
+        ? await tx.chatSession.update({ where: { id: session.id }, data: { title: generatedTitle } })
+        : session;
+      return { userMessage, assistantMessage, updatedSession };
     });
 
     return {
-      answer: answer,
+      answer,
+      userMessage,
       assistantMessage,
       session: updatedSession,
       toolHistory,

@@ -2,6 +2,7 @@ import { z } from "zod";
 import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
 import { decrypt } from "../../lib/crypto.js";
+import { gitlabApiBase } from "../../lib/gitlab-client.js";
 
 export const readFullFileInputSchema = z.object({
   projectId: z.string().min(1),
@@ -151,7 +152,7 @@ export async function readFullFile(input: unknown) {
 
   try {
     const fileResponse = await axios.get<GitlabRepositoryFileResponse>(
-      `https://gitlab.com/api/v4/projects/${encodedProject}/repository/files/${encodedFilePath}`,
+      `${gitlabApiBase(integration.repoUrl)}/projects/${encodedProject}/repository/files/${encodedFilePath}`,
       {
         headers: { "PRIVATE-TOKEN": token },
         params: { ref: integration.branch },

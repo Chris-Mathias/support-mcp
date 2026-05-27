@@ -2,6 +2,7 @@ import { z } from "zod";
 import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
 import { decrypt } from "../../lib/crypto.js";
+import { gitlabApiBase } from "../../lib/gitlab-client.js";
 
 export const getRepositoryOverviewInputSchema = z.object({
   projectId: z.string().min(1),
@@ -455,6 +456,7 @@ function buildCentralDirectories(
 }
 
 async function fetchGitlabTreePage(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -462,7 +464,7 @@ async function fetchGitlabTreePage(params: {
   page: number;
 }) {
   const response = await axios.get<GitlabTreeItem[]>(
-    `https://gitlab.com/api/v4/projects/${params.encodedProject}/repository/tree`,
+    `${params.baseUrl}/projects/${params.encodedProject}/repository/tree`,
     {
       headers: { "PRIVATE-TOKEN": params.token },
       params: {
@@ -487,6 +489,7 @@ async function fetchGitlabTreePage(params: {
 }
 
 async function fetchAllGitlabTree(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -509,6 +512,7 @@ async function fetchAllGitlabTree(params: {
 }
 
 async function fetchReadmeFromRoot(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -531,7 +535,7 @@ async function fetchReadmeFromRoot(params: {
   const encodedFilePath = encodeURIComponent(readmeFile.path);
 
   const response = await axios.get<GitlabRepositoryFileResponse>(
-    `https://gitlab.com/api/v4/projects/${params.encodedProject}/repository/files/${encodedFilePath}`,
+    `${params.baseUrl}/projects/${params.encodedProject}/repository/files/${encodedFilePath}`,
     {
       headers: { "PRIVATE-TOKEN": params.token },
       params: { ref: params.ref },
@@ -561,16 +565,19 @@ export async function getRepositoryOverview(input: unknown) {
 
   const token = decrypt(integration.token);
   const encodedProject = encodeURIComponent(integration.projectPath);
+  const baseUrl = gitlabApiBase(integration.repoUrl);
 
   try {
     const [rootTree, recursiveTree] = await Promise.all([
       fetchAllGitlabTree({
+        baseUrl,
         encodedProject,
         token,
         ref: integration.branch,
         recursive: false,
       }),
       fetchAllGitlabTree({
+        baseUrl,
         encodedProject,
         token,
         ref: integration.branch,
@@ -589,6 +596,7 @@ export async function getRepositoryOverview(input: unknown) {
       .sort();
 
     const readme = await fetchReadmeFromRoot({
+      baseUrl,
       encodedProject,
       token,
       ref: integration.branch,

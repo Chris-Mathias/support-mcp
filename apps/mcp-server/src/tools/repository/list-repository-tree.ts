@@ -2,6 +2,7 @@ import { z } from "zod";
 import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
 import { decrypt } from "../../lib/crypto.js";
+import { gitlabApiBase } from "../../lib/gitlab-client.js";
 
 export const listRepositoryTreeInputSchema = z.object({
   projectId: z.string().min(1),
@@ -40,6 +41,7 @@ function getDepthFromRelativePath(relativePath: string): number {
 }
 
 async function fetchGitlabTreePage(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -48,7 +50,7 @@ async function fetchGitlabTreePage(params: {
   recursive?: boolean;
 }) {
   const response = await axios.get<GitlabTreeItem[]>(
-    `https://gitlab.com/api/v4/projects/${params.encodedProject}/repository/tree`,
+    `${params.baseUrl}/projects/${params.encodedProject}/repository/tree`,
     {
       headers: { "PRIVATE-TOKEN": params.token },
       params: {
@@ -74,6 +76,7 @@ async function fetchGitlabTreePage(params: {
 }
 
 async function fetchAllGitlabTree(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -111,9 +114,11 @@ export async function listRepositoryTree(input: unknown) {
   const token = decrypt(integration.token);
   const normalizedPath = normalizePath(path);
   const encodedProject = encodeURIComponent(integration.projectPath);
+  const baseUrl = gitlabApiBase(integration.repoUrl);
 
   try {
     const treeItems = await fetchAllGitlabTree({
+      baseUrl,
       encodedProject,
       token,
       ref: integration.branch,

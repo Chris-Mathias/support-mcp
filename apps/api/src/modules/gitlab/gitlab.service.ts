@@ -12,6 +12,11 @@ function encodeProjectPath(projectPath: string) {
   return encodeURIComponent(projectPath);
 }
 
+function gitlabApiBase(repoUrl: string): string {
+  const u = new URL(repoUrl);
+  return `${u.protocol}//${u.host}/api/v4`;
+}
+
 function toSafe(row: GitlabIntegration): SafeGitlabIntegration {
   const { token: _token, ...rest } = row;
   return { ...rest, tokenConfigured: !!_token };
@@ -84,7 +89,7 @@ export class GitlabService {
     const encodedProject = encodeProjectPath(integration.projectPath);
 
     const response = await axios.get(
-      `https://gitlab.com/api/v4/projects/${encodedProject}/repository/tree`,
+      `${gitlabApiBase(integration.repoUrl)}/projects/${encodedProject}/repository/tree`,
       {
         headers: {
           "PRIVATE-TOKEN": integration.token,
@@ -106,7 +111,7 @@ export class GitlabService {
     const encodedFilePath = encodeURIComponent(filePath);
 
     const response = await axios.get(
-      `https://gitlab.com/api/v4/projects/${encodedProject}/repository/files/${encodedFilePath}`,
+      `${gitlabApiBase(integration.repoUrl)}/projects/${encodedProject}/repository/files/${encodedFilePath}`,
       {
         headers: {
           "PRIVATE-TOKEN": integration.token,
@@ -146,6 +151,7 @@ export class GitlabService {
   }
 
   private async validateGitlabAccess(data: {
+    repoUrl: string;
     projectPath: string;
     branch: string;
     token: string;
@@ -154,7 +160,7 @@ export class GitlabService {
 
     try {
       await axios.get(
-        `https://gitlab.com/api/v4/projects/${encodedProject}/repository/tree`,
+        `${gitlabApiBase(data.repoUrl)}/projects/${encodedProject}/repository/tree`,
         {
           headers: {
             "PRIVATE-TOKEN": data.token,

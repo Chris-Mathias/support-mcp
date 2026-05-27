@@ -41,9 +41,15 @@ export class ChatService {
     });
   }
 
+  private async loadActiveSession(sessionId: string) {
+    return prisma.chatSession.findFirst({
+      where: { id: sessionId, deletedAt: null },
+    });
+  }
+
   async getSessionById(sessionId: string) {
-    return prisma.chatSession.findUnique({
-      where: { id: sessionId },
+    return prisma.chatSession.findFirst({
+      where: { id: sessionId, deletedAt: null },
       include: {
         messages: {
           orderBy: { createdAt: "asc" },
@@ -54,12 +60,7 @@ export class ChatService {
   }
 
   async createMessage(sessionId: string, data: CreateChatMessageInput) {
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
-      include: {
-        project: true,
-      },
-    });
+    const session = await this.loadActiveSession(sessionId);
 
     if (!session) {
       throw new Error("SESSION_NOT_FOUND");
@@ -81,9 +82,7 @@ export class ChatService {
   }
 
   async listMessages(sessionId: string, projectId: string) {
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
-    });
+    const session = await this.loadActiveSession(sessionId);
 
     if (!session) {
       throw new Error("SESSION_NOT_FOUND");
@@ -100,9 +99,7 @@ export class ChatService {
   }
 
   async deleteSession(sessionId: string, projectId: string) {
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
-    });
+    const session = await this.loadActiveSession(sessionId);
 
     if (!session) {
       throw new Error("SESSION_NOT_FOUND");
@@ -130,9 +127,7 @@ export class ChatService {
   }
 
   async closeSession(sessionId: string, projectId: string) {
-    const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
-    });
+    const session = await this.loadActiveSession(sessionId);
 
     if (!session) {
       throw new Error("SESSION_NOT_FOUND");

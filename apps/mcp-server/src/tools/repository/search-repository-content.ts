@@ -3,6 +3,7 @@ import axios from "axios";
 import { prisma } from "../../lib/prisma.js";
 import { buildExcerpt } from "../../lib/excerpt.js";
 import { decrypt } from "../../lib/crypto.js";
+import { gitlabApiBase } from "../../lib/gitlab-client.js";
 
 export const searchRepositoryContentInputSchema = z.object({
   projectId: z.string().min(1),
@@ -187,6 +188,7 @@ function estimateRelevanceScore(params: {
 }
 
 async function fetchGitlabTreePage(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -194,7 +196,7 @@ async function fetchGitlabTreePage(params: {
   recursive?: boolean;
 }) {
   const response = await axios.get<GitlabTreeItem[]>(
-    `https://gitlab.com/api/v4/projects/${params.encodedProject}/repository/tree`,
+    `${params.baseUrl}/projects/${params.encodedProject}/repository/tree`,
     {
       headers: {
         "PRIVATE-TOKEN": params.token,
@@ -221,6 +223,7 @@ async function fetchGitlabTreePage(params: {
 }
 
 async function fetchAllGitlabTree(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -243,6 +246,7 @@ async function fetchAllGitlabTree(params: {
 }
 
 async function readGitlabFile(params: {
+  baseUrl: string;
   encodedProject: string;
   token: string;
   ref: string;
@@ -251,7 +255,7 @@ async function readGitlabFile(params: {
   const encodedFilePath = encodeURIComponent(params.filePath);
 
   const response = await axios.get<GitlabRepositoryFileResponse>(
-    `https://gitlab.com/api/v4/projects/${params.encodedProject}/repository/files/${encodedFilePath}`,
+    `${params.baseUrl}/projects/${params.encodedProject}/repository/files/${encodedFilePath}`,
     {
       headers: {
         "PRIVATE-TOKEN": params.token,
@@ -283,9 +287,11 @@ export async function searchRepositoryContent(input: unknown) {
   const token = decrypt(integration.token);
   const normalizedPathPrefix = normalizePath(pathPrefix);
   const encodedProject = encodeProjectPath(integration.projectPath);
+  const baseUrl = gitlabApiBase(integration.repoUrl);
 
   try {
     const treeItems = await fetchAllGitlabTree({
+      baseUrl,
       encodedProject,
       token,
       ref: integration.branch,
@@ -329,6 +335,7 @@ export async function searchRepositoryContent(input: unknown) {
     for (const filePath of candidateFiles) {
       try {
         const { size, content } = await readGitlabFile({
+          baseUrl,
           encodedProject,
           token,
           ref: integration.branch,
