@@ -217,26 +217,21 @@ export class LlmService {
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<string> {
-    /**
-     * Primeiro tenta pelo nome MCP direto.
-     * Ex.: tools["search_project_gitlab_files"]
-     */
-    const directTool = tools[toolName];
-    if (directTool) {
-      return directTool(args);
+    const fn = tools[toolName] ?? tools[snakeToCamel(toolName)];
+
+    if (!fn) {
+      throw new Error(`Tool não suportada no runtime: ${toolName}`);
     }
 
-    /**
-     * Compatibilidade com runtime camelCase.
-     * Ex.: search_project_gitlab_files -> searchProjectGitlabFiles
-     */
-    const runtimeName = snakeToCamel(toolName);
-    const camelTool = tools[runtimeName];
-    if (camelTool) {
-      return camelTool(args);
+    try {
+      return await fn(args);
+    } catch (err) {
+      // Return validation errors to the LLM so it can retry with corrected arguments
+      if (err instanceof Error && err.name === "ZodError") {
+        return JSON.stringify({ error: "INVALID_TOOL_ARGUMENTS", details: err.message });
+      }
+      throw err;
     }
-
-    throw new Error(`Tool não suportada no runtime: ${toolName}`);
   }
 
   private async createResponse(

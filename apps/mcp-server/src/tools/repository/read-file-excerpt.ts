@@ -18,13 +18,23 @@ export const readFileExcerptInputSchema = z
     before: z.number().int().min(0).max(200).default(20),
     after: z.number().int().min(0).max(200).default(40),
   })
-  .transform((data) => ({
-    ...data,
-    query: data.query.trim() || undefined,
-    startLine: data.startLine > 0 ? data.startLine : undefined,
-    endLine: data.endLine > 0 ? data.endLine : undefined,
-    anchorLine: data.anchorLine > 0 ? data.anchorLine : undefined,
-  }))
+  .transform((data) => {
+    const hasRange = data.startLine > 0 && data.endLine > 0;
+    const onlyStart = data.startLine > 0 && data.endLine === 0;
+    return {
+      ...data,
+      query: data.query.trim() || undefined,
+      startLine: hasRange ? data.startLine : undefined,
+      endLine: hasRange ? data.endLine : undefined,
+      // startLine alone (endLine omitted or 0) is treated as anchorLine
+      anchorLine:
+        data.anchorLine > 0
+          ? data.anchorLine
+          : onlyStart
+            ? data.startLine
+            : undefined,
+    };
+  })
   .superRefine((data, ctx) => {
     const hasExplicitRange =
       typeof data.startLine === "number" || typeof data.endLine === "number";
@@ -37,18 +47,6 @@ export const readFileExcerptInputSchema = z
         message:
           "Informe query, startLine/endLine ou anchorLine para ler um trecho do arquivo.",
         path: ["query"],
-      });
-    }
-
-    if (
-      (typeof data.startLine === "number" &&
-        typeof data.endLine !== "number") ||
-      (typeof data.endLine === "number" && typeof data.startLine !== "number")
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "startLine e endLine devem ser informados juntos.",
-        path: ["startLine"],
       });
     }
 
