@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   CheckCircle,
-  FileCode,
-  Folder,
   GitBranch,
+  Info,
   RefreshCw,
   Save,
   Settings,
@@ -14,13 +13,8 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
 import { ProjectSelect } from "../components/ui/ProjectSelect";
 import { getApiErrorMessage } from "../lib/errors";
-import { cn } from "../lib/cn";
 import { api } from "../services/api";
-import type {
-  GitlabFileContent,
-  GitlabIntegration,
-  GitlabTreeItem,
-} from "../types/gitlab";
+import type { GitlabIntegration } from "../types/gitlab";
 import type { Project } from "../types/project";
 
 export function GitlabIntegrationPage() {
@@ -35,18 +29,10 @@ export function GitlabIntegrationPage() {
   const [integration, setIntegration] = useState<GitlabIntegration | null>(
     null,
   );
-  const [files, setFiles] = useState<GitlabTreeItem[]>([]);
-  const [selectedFilePath, setSelectedFilePath] = useState("");
-  const [fileContent, setFileContent] = useState<GitlabFileContent | null>(
-    null,
-  );
-  const [currentPath, setCurrentPath] = useState("");
 
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingIntegration, setLoadingIntegration] = useState(false);
   const [savingIntegration, setSavingIntegration] = useState(false);
-  const [loadingFiles, setLoadingFiles] = useState(false);
-  const [loadingFileContent, setLoadingFileContent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,17 +41,17 @@ export function GitlabIntegrationPage() {
     api
       .get<Project[]>("/projects")
       .then((response) => setProjects(response.data))
-      .catch((error) => setError(getApiErrorMessage(error, "Não foi possível carregar os projetos.")))
+      .catch((error) =>
+        setError(
+          getApiErrorMessage(error, "Não foi possível carregar os projetos."),
+        ),
+      )
       .finally(() => setLoadingProjects(false));
   }, []);
 
   async function handleProjectChange(projectId: string) {
     setSelectedProjectId(projectId);
-    setFiles([]);
-    setSelectedFilePath("");
-    setFileContent(null);
     setError(null);
-    setCurrentPath("");
 
     if (!projectId) {
       setIntegration(null);
@@ -117,51 +103,11 @@ export function GitlabIntegrationPage() {
       setIntegration(response.data);
       setToken("");
     } catch (error) {
-      setError(getApiErrorMessage(error, "Não foi possível salvar a integração."));
+      setError(
+        getApiErrorMessage(error, "Não foi possível salvar a integração."),
+      );
     } finally {
       setSavingIntegration(false);
-    }
-  }
-
-  async function handleLoadFiles(path = "") {
-    if (!selectedProjectId) return;
-
-    setLoadingFiles(true);
-    setError(null);
-    setFileContent(null);
-    setSelectedFilePath("");
-    setCurrentPath(path);
-
-    try {
-      const response = await api.get<GitlabTreeItem[]>(
-        `/projects/${selectedProjectId}/gitlab/files`,
-        { params: { path } },
-      );
-      setFiles(response.data);
-    } catch (error) {
-      setError(getApiErrorMessage(error, "Não foi possível listar arquivos."));
-    } finally {
-      setLoadingFiles(false);
-    }
-  }
-
-  async function handleOpenFile(filePath: string) {
-    if (!selectedProjectId) return;
-
-    setLoadingFileContent(true);
-    setError(null);
-    setSelectedFilePath(filePath);
-
-    try {
-      const response = await api.get<GitlabFileContent>(
-        `/projects/${selectedProjectId}/gitlab/file-content`,
-        { params: { filePath } },
-      );
-      setFileContent(response.data);
-    } catch (error) {
-      setError(getApiErrorMessage(error, "Não foi possível carregar o conteúdo do arquivo."));
-    } finally {
-      setLoadingFileContent(false);
     }
   }
 
@@ -175,7 +121,7 @@ export function GitlabIntegrationPage() {
               Integração GitLab
             </h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Configure o repositório associado ao projeto e navegue pelo código.
+              Configure o repositório GitLab associado ao projeto.
             </p>
           </div>
 
@@ -278,7 +224,7 @@ export function GitlabIntegrationPage() {
         <EmptyState
           icon={GitBranch}
           title="Selecione um projeto para configurar a integração."
-          description="A navegação do repositório aparece aqui depois que um projeto for escolhido."
+          description="As configurações do repositório aparecem aqui depois que um projeto for escolhido."
           className="flex-1"
         />
       ) : loadingIntegration ? (
@@ -287,121 +233,57 @@ export function GitlabIntegrationPage() {
         </div>
       ) : !integration ? (
         <div className="flex flex-1 p-6">
-          <Panel className="mx-auto flex w-full max-w-5xl items-center justify-center">
+          <Panel className="mx-auto flex w-full max-w-2xl items-center justify-center">
             <EmptyState
               icon={Settings}
               title="Preencha a configuração do GitLab na coluna lateral."
-              description="Depois de salvar, o explorador de arquivos e o visualizador de conteúdo ficam disponíveis aqui."
+              description="Preencha a configuração do GitLab na coluna lateral para ativar a integração."
             />
           </Panel>
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden p-6">
-          <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-1 gap-4 overflow-hidden">
-            <Panel className="flex w-80 min-w-0 flex-col overflow-hidden">
-              <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
-                  Explorer
-                </span>
-
-                <button
-                  onClick={() => handleLoadFiles("")}
-                  className="rounded p-1 text-zinc-500 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                  title="Recarregar raiz"
-                >
-                  <RefreshCw
-                    size={14}
-                    className={loadingFiles ? "animate-spin" : ""}
-                  />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-2">
-                {currentPath ? (
-                  <button
-                    onClick={() => {
-                      const parts = currentPath.split("/");
-                      parts.pop();
-                      handleLoadFiles(parts.join("/"));
-                    }}
-                    className="mb-2 flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm font-medium text-zinc-600 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  >
-                    .. (voltar)
-                  </button>
-                ) : null}
-
-                {files.map((item) => {
-                  const isDir = item.type === "tree";
-
-                  return (
-                    <button
-                      key={item.path}
-                      onClick={() =>
-                        isDir
-                          ? handleLoadFiles(item.path)
-                          : handleOpenFile(item.path)
-                      }
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded p-1.5 text-left text-sm transition-colors",
-                        selectedFilePath === item.path
-                          ? "bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                          : "text-zinc-700 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800",
-                      )}
-                    >
-                      {isDir ? (
-                        <Folder
-                          size={16}
-                          className="fill-zinc-500/20 text-zinc-500 dark:fill-zinc-300/20 dark:text-zinc-300"
-                        />
-                      ) : (
-                        <FileCode
-                          size={16}
-                          className="text-zinc-500 dark:text-zinc-400"
-                        />
-                      )}
-                      <span className="truncate">{item.name}</span>
-                    </button>
-                  );
-                })}
-
-                {files.length === 0 && !loadingFiles ? (
-                  <p className="mt-4 text-center text-xs text-zinc-400 dark:text-zinc-500">
-                    Nenhum arquivo listado. Use o recarregar para consultar a raiz.
-                  </p>
-                ) : null}
-              </div>
-            </Panel>
-
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-sm">
-              {loadingFileContent ? (
-                <div className="flex flex-1 items-center justify-center text-zinc-400">
-                  <RefreshCw size={32} className="animate-spin" />
-                </div>
-              ) : fileContent ? (
-                <>
-                  <div className="flex flex-none items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-4 py-2 font-mono text-sm text-zinc-300">
-                    <FileCode size={16} />
-                    {fileContent.file_path}
-                  </div>
-
-                  <textarea
-                    readOnly
-                    value={fileContent.decodedContent}
-                    className="w-full flex-1 resize-none overflow-y-auto bg-zinc-950 p-4 font-mono text-sm text-zinc-300 outline-none"
-                    spellCheck={false}
-                  />
-                </>
-              ) : (
-                <EmptyState
-                  icon={FileCode}
-                  title="Selecione um arquivo para visualizar o conteúdo."
-                  description="O editor segue o mesmo painel principal do chat, com foco total no conteúdo ativo."
-                  className="flex-1 text-zinc-600 dark:text-zinc-500"
-                  iconClassName="opacity-50"
-                />
-              )}
+        <div className="flex flex-1 items-start justify-center p-6">
+          <Panel className="w-full max-w-2xl p-6">
+            <div className="mb-6 flex items-center gap-3">
+              <CheckCircle
+                size={22}
+                className="shrink-0 text-emerald-500 dark:text-emerald-400"
+              />
+              <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-100">
+                Repositório conectado
+              </h2>
             </div>
-          </div>
+
+            <dl className="mb-1 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+              <dt className="font-medium text-zinc-500 dark:text-zinc-400">
+                Repo URL
+              </dt>
+              <dd className="truncate text-zinc-800 dark:text-zinc-100">
+                {integration.repoUrl}
+              </dd>
+
+              <dt className="font-medium text-zinc-500 dark:text-zinc-400">
+                Project Path
+              </dt>
+              <dd className="truncate font-mono text-zinc-800 dark:text-zinc-100">
+                {integration.projectPath}
+              </dd>
+
+              <dt className="font-medium text-zinc-500 dark:text-zinc-400">
+                Branch
+              </dt>
+              <dd className="font-mono text-zinc-800 dark:text-zinc-100">
+                {integration.branch}
+              </dd>
+
+              <dt className="font-medium text-zinc-500 dark:text-zinc-400">
+                Configurado
+              </dt>
+              <dd className="text-zinc-800 dark:text-zinc-100">
+                {new Date(integration.createdAt).toLocaleDateString("pt-BR")}
+              </dd>
+            </dl>
+          </Panel>
         </div>
       )}
     </WorkspacePage>
