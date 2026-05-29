@@ -108,3 +108,40 @@ describe('ChatService — deletedAt filtering (C-3)', () => {
     });
   });
 });
+
+describe('ChatService — purgeExpiredSessions (C-8)', () => {
+  let service: ChatService;
+
+  beforeEach(() => {
+    service = new ChatService();
+    vi.clearAllMocks();
+  });
+
+  it('chama deleteMany com as três condições OR', async () => {
+    vi.mocked(prisma.chatSession.deleteMany).mockResolvedValueOnce({ count: 0 } as never);
+    await service.purgeExpiredSessions(30);
+    expect(prisma.chatSession.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { deletedAt: { lt: expect.any(Date) } },
+          { closedAt: { lt: expect.any(Date) } },
+          { AND: [{ messages: { none: {} } }, { createdAt: { lt: expect.any(Date) } }] },
+        ],
+      },
+    });
+  });
+
+  it('usa cutoff baseado em retentionDays', async () => {
+    vi.mocked(prisma.chatSession.deleteMany).mockResolvedValueOnce({ count: 0 } as never);
+    const before = Date.now();
+    await service.purgeExpiredSessions(7);
+    const after = Date.now();
+    const call = vi.mocked(prisma.chatSession.deleteMany).mock.calls[0][0] as {
+      where: { OR: Array<{ deletedAt?: { lt: Date } }> };
+    };
+    const cutoff = call.where.OR[0].deletedAt!.lt.getTime();
+    const expected7Days = 7 * 24 * 60 * 60 * 1000;
+    expect(before - cutoff).toBeGreaterThanOrEqual(expected7Days - 100);
+    expect(after - cutoff).toBeLessThanOrEqual(expected7Days + 100);
+  });
+});
