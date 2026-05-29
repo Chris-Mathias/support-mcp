@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import {
@@ -34,11 +34,9 @@ export async function authRoutes(app: FastifyInstance, opts: AuthRouteOptions) {
 
       const appPassword = process.env.APP_PASSWORD!;
 
-      const expected = Buffer.from(appPassword);
-      const actual = Buffer.from(parsed.data.password);
-
-      const match =
-        expected.length === actual.length && timingSafeEqual(expected, actual);
+      const expected = createHash("sha256").update(appPassword).digest();
+      const actual = createHash("sha256").update(parsed.data.password).digest();
+      const match = timingSafeEqual(expected, actual);
 
       if (!match) {
         request.log.warn({ ip: request.ip }, "auth:login:failure");
