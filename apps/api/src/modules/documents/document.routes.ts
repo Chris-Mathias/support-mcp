@@ -13,6 +13,7 @@ type DocumentRouteOptions = {
 const documentService = new DocumentService();
 
 const INVALID_PARAMS = "Parâmetros inválidos";
+const MAGIC_PDF = Buffer.from("%PDF-", "ascii");
 
 export async function documentRoutes(app: FastifyInstance, opts: DocumentRouteOptions) {
   app.post("/projects/:projectId/documents", { config: { rateLimit: { max: opts.rateLimitUpload, timeWindow: opts.rateLimitWindow } } }, async (request, reply) => {
@@ -35,12 +36,9 @@ export async function documentRoutes(app: FastifyInstance, opts: DocumentRouteOp
 
     const buffer = await file.toBuffer();
 
-    const isValidMime = file.mimetype === "application/pdf";
-    const isValidExt = file.filename.toLowerCase().endsWith(".pdf");
-
-    if (!isValidMime || !isValidExt) {
+    if (!buffer.subarray(0, 5).equals(MAGIC_PDF)) {
       return reply.status(415).send({
-        message: "Apenas arquivos PDF são aceitos",
+        message: "Arquivo não é um PDF válido",
       });
     }
 
@@ -53,7 +51,7 @@ export async function documentRoutes(app: FastifyInstance, opts: DocumentRouteOp
         buffer,
       });
 
-      return reply.status(201).send(document);
+      return reply.status(202).send(document);
     } catch (error) {
       if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
         return reply.status(404).send({

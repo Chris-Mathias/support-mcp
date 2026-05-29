@@ -83,18 +83,21 @@ export class DocumentService {
       },
     });
 
-    if (!this.isPdf(data.mimeType, safeFileName)) {
-      return document;
+    if (this.isPdf(data.mimeType, safeFileName)) {
+      void this.processPdfInBackground(document.id, data.buffer);
     }
 
+    return document;
+  }
+
+  private async processPdfInBackground(documentId: string, buffer: Buffer) {
     try {
-      const { extractedText, pageCount, chunks, summary } = await runPdfWorker(
-        data.buffer,
-      );
+      const { extractedText, pageCount, chunks, summary } =
+        await runPdfWorker(buffer);
 
       if (!extractedText) {
-        return prisma.projectDocument.update({
-          where: { id: document.id },
+        await prisma.projectDocument.update({
+          where: { id: documentId },
           data: {
             extractedText: "",
             pageCount: null,
@@ -103,11 +106,12 @@ export class DocumentService {
             processingError: "PDF_TEXT_EXTRACTION_EMPTY",
           },
         });
+        return;
       }
 
       await prisma.$transaction([
         prisma.projectDocument.update({
-          where: { id: document.id },
+          where: { id: documentId },
           data: {
             extractedText,
             pageCount,
@@ -120,7 +124,7 @@ export class DocumentService {
           ? [
               prisma.projectDocumentChunk.createMany({
                 data: chunks.map((chunk) => ({
-                  documentId: document.id,
+                  documentId,
                   chunkIndex: chunk.chunkIndex,
                   pageNumberStart: chunk.pageNumberStart ?? null,
                   pageNumberEnd: chunk.pageNumberEnd ?? null,
@@ -131,29 +135,32 @@ export class DocumentService {
             ]
           : []),
       ]);
-
-      return prisma.projectDocument.findUniqueOrThrow({
-        where: { id: document.id },
-        include: {
-          chunks: {
-            orderBy: { chunkIndex: "asc" },
-          },
-        },
-      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "UNKNOWN_PDF_PROCESSING_ERROR";
 
       await prisma.projectDocument.update({
-        where: { id: document.id },
+        where: { id: documentId },
         data: {
           processingStatus: "FAILED",
           processingError: message,
         },
       });
-
-      throw error;
     }
+  }
+
+  async markStuckDocumentsAsFailed(maxAgeMinutes: number) {
+    const cutoff = new Date(Date.now() - maxAgeMinutes * 60 * 1000);
+    await prisma.projectDocument.updateMany({
+      where: {
+        processingStatus: "PROCESSING",
+        updatedAt: { lt: cutoff },
+      },
+      data: {
+        processingStatus: "FAILED",
+        processingError: "PROCESSING_TIMEOUT",
+      },
+    });
   }
 
   async listByProject(projectId: string) {

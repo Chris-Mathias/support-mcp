@@ -1,10 +1,14 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import {
+  AlertTriangle,
+  CheckCircle,
   FileText,
   HardDrive,
+  Loader2,
   Trash2,
   Type,
   UploadCloud,
+  XCircle,
 } from "lucide-react";
 import { WorkspacePage } from "../components/layout/WorkspacePage";
 import { AlertBanner } from "../components/ui/AlertBanner";
@@ -14,8 +18,55 @@ import { ProjectSelect } from "../components/ui/ProjectSelect";
 import { getApiErrorMessage } from "../lib/errors";
 import { formatDate, formatFileSize } from "../lib/format";
 import { api } from "../services/api";
-import type { ProjectDocument } from "../types/document";
+import type { DocumentProcessingStatus, ProjectDocument } from "../types/document";
 import type { Project } from "../types/project";
+
+const PROCESSING_ERROR_MESSAGES: Record<string, string> = {
+  PDF_TEXT_EXTRACTION_EMPTY: "Não foi possível extrair texto deste PDF (possivelmente escaneado).",
+  PROCESSING_TIMEOUT: "O processamento demorou demais e foi interrompido. Tente enviar novamente.",
+  UNKNOWN_PDF_PROCESSING_ERROR: "Falha ao processar o PDF.",
+};
+
+function getProcessingErrorMessage(error?: string | null) {
+  if (!error) return "Falha ao processar o PDF.";
+  return PROCESSING_ERROR_MESSAGES[error] ?? "Falha ao processar o PDF.";
+}
+
+function StatusBadge({ status, error }: { status: DocumentProcessingStatus; error?: string | null }) {
+  if (status === "PROCESSING" || status === "PENDING") {
+    return (
+      <span className="mt-2 flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400">
+        <Loader2 size={14} className="animate-spin" />
+        Processando…
+      </span>
+    );
+  }
+  if (status === "READY") {
+    return (
+      <span className="mt-2 flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+        <CheckCircle size={14} />
+        Pronto
+      </span>
+    );
+  }
+  if (status === "FAILED") {
+    return (
+      <span className="mt-2 flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400" title={error ?? undefined}>
+        <XCircle size={14} />
+        {getProcessingErrorMessage(error)}
+      </span>
+    );
+  }
+  if (status === "UNSUPPORTED") {
+    return (
+      <span className="mt-2 flex items-center gap-1.5 text-sm text-yellow-600 dark:text-yellow-400">
+        <AlertTriangle size={14} />
+        {getProcessingErrorMessage(error)}
+      </span>
+    );
+  }
+  return null;
+}
 
 export function DocumentsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -38,6 +89,19 @@ export function DocumentsPage() {
     );
     setDocuments(response.data);
   }
+
+  useEffect(() => {
+    const hasProcessing = documents.some(
+      (d) => d.processingStatus === "PROCESSING" || d.processingStatus === "PENDING",
+    );
+    if (!hasProcessing || !selectedProjectId) return;
+
+    const interval = setInterval(() => {
+      loadDocuments(selectedProjectId).catch(() => {});
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [documents, selectedProjectId]);
 
   async function handleProjectChange(projectId: string) {
     setSelectedProjectId(projectId);
@@ -212,11 +276,15 @@ export function DocumentsPage() {
                         <span>{formatDate(document.createdAt)}</span>
                       </div>
 
-                      <p className="mt-3 line-clamp-2 rounded-lg bg-zinc-50 p-2 text-sm italic text-zinc-600 dark:bg-zinc-950 dark:text-zinc-400">
-                        {document.summary
-                          ? `"${document.summary}"`
-                          : "Sem resumo disponível."}
-                      </p>
+                      <StatusBadge status={document.processingStatus} error={document.processingError} />
+
+                      {document.processingStatus === "READY" && (
+                        <p className="mt-3 line-clamp-2 rounded-lg bg-zinc-50 p-2 text-sm italic text-zinc-600 dark:bg-zinc-950 dark:text-zinc-400">
+                          {document.summary
+                            ? `"${document.summary}"`
+                            : "Sem resumo disponível."}
+                        </p>
+                      )}
                     </div>
 
                     <button

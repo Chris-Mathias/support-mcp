@@ -6,6 +6,7 @@ import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import { chatRoutes } from "./modules/chat/chat.routes.js";
 import { ChatService } from "./modules/chat/chat.service.js";
+import { DocumentService } from "./modules/documents/document.service.js";
 import { prisma } from "./lib/prisma.js";
 import { documentRoutes } from "./modules/documents/document.routes.js";
 import { gitlabRoutes } from "./modules/gitlab/gitlab.routes.js";
@@ -113,6 +114,7 @@ await app.register(supportRoutes, {
 const port = Number(process.env.PORT || 3333);
 const retentionDays = Number(process.env.SESSION_RETENTION_DAYS ?? 30);
 const chatService = new ChatService();
+const documentService = new DocumentService();
 
 chatService.purgeExpiredSessions(retentionDays).catch((err) => {
   app.log.warn({ err }, "Failed to purge expired chat sessions on startup");
@@ -126,6 +128,10 @@ purgeExpiredAuthSessions().catch((err) => {
   app.log.warn({ err }, "Failed to purge expired auth sessions on startup");
 });
 
+documentService.markStuckDocumentsAsFailed(5).catch((err) => {
+  app.log.warn({ err }, "Failed to mark stuck documents as failed on startup");
+});
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 setInterval(
   () => {
@@ -134,6 +140,9 @@ setInterval(
     });
     purgeExpiredAuthSessions().catch((err) => {
       app.log.warn({ err }, "Failed to purge expired auth sessions");
+    });
+    documentService.markStuckDocumentsAsFailed(5).catch((err) => {
+      app.log.warn({ err }, "Failed to mark stuck documents as failed");
     });
   },
   DAY_MS,
