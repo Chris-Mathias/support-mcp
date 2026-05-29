@@ -12,10 +12,6 @@ export const listMessagesQuerySchema = z.object({
   projectId: z.string().min(1, "projectId é obrigatório"),
 });
 
-export const closeSessionBodySchema = z.object({
-  projectId: z.string().min(1, "projectId é obrigatório"),
-});
-
 export const deleteSessionBodySchema = z.object({
   projectId: z.string().min(1, "projectId é obrigatório"),
 });

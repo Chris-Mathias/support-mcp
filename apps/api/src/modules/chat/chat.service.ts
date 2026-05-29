@@ -29,14 +29,15 @@ export class ChatService {
       where: {
         projectId,
         messages: { some: {} },
-        closedAt: null,
         deletedAt: null,
       },
       orderBy: { createdAt: "desc" },
-      include: {
-        messages: {
-          orderBy: { createdAt: "asc" },
-        },
+      select: {
+        id: true,
+        projectId: true,
+        title: true,
+        createdAt: true,
+        deletedAt: true,
       },
     });
   }
@@ -121,28 +122,8 @@ export class ChatService {
       where: {
         OR: [
           { deletedAt: { lt: cutoff } },
-          { closedAt: { lt: cutoff } },
           { AND: [{ messages: { none: {} } }, { createdAt: { lt: cutoff } }] },
         ],
-      },
-    });
-  }
-
-  async closeSession(sessionId: string, projectId: string) {
-    const session = await this.loadActiveSession(sessionId);
-
-    if (!session) {
-      throw new Error("SESSION_NOT_FOUND");
-    }
-
-    if (session.projectId !== projectId) {
-      throw new Error("PROJECT_SESSION_MISMATCH");
-    }
-
-    return prisma.chatSession.update({
-      where: { id: sessionId },
-      data: {
-        closedAt: new Date(),
       },
     });
   }

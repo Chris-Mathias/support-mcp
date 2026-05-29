@@ -37,7 +37,6 @@ const ACTIVE_SESSION = {
   projectId: 'proj_1',
   title: null,
   deletedAt: null,
-  closedAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

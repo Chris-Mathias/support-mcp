@@ -24,7 +24,6 @@ model ChatSession {
   projectId String
   title     String?
   createdAt DateTime  @default(now())
-  closedAt  DateTime?
   deletedAt DateTime?
 
   project   Project  @relation(fields: [projectId], references: [id])

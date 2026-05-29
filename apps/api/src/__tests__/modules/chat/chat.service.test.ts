@@ -28,7 +28,6 @@ const ACTIVE_SESSION = {
   createdAt: new Date(),
   updatedAt: new Date(),
   deletedAt: null,
-  closedAt: null,
 };
 
 const DELETED_SESSION = { ...ACTIVE_SESSION, deletedAt: new Date() };
@@ -91,13 +90,6 @@ describe('ChatService — deletedAt filtering (C-3)', () => {
     });
   });
 
-  describe('closeSession', () => {
-    it('throws SESSION_NOT_FOUND when session has deletedAt', async () => {
-      vi.mocked(prisma.chatSession.findFirst).mockResolvedValueOnce(null);
-      await expect(service.closeSession('sess_1', 'proj_1')).rejects.toThrow('SESSION_NOT_FOUND');
-    });
-  });
-
   describe('loadActiveSession — where clause', () => {
     it('always passes deletedAt: null in the where clause', async () => {
       vi.mocked(prisma.chatSession.findFirst).mockResolvedValueOnce(null);
@@ -117,14 +109,13 @@ describe('ChatService — purgeExpiredSessions (C-8)', () => {
     vi.clearAllMocks();
   });
 
-  it('chama deleteMany com as três condições OR', async () => {
+  it('chama deleteMany com as duas condições OR', async () => {
     vi.mocked(prisma.chatSession.deleteMany).mockResolvedValueOnce({ count: 0 } as never);
     await service.purgeExpiredSessions(30);
     expect(prisma.chatSession.deleteMany).toHaveBeenCalledWith({
       where: {
         OR: [
           { deletedAt: { lt: expect.any(Date) } },
-          { closedAt: { lt: expect.any(Date) } },
           { AND: [{ messages: { none: {} } }, { createdAt: { lt: expect.any(Date) } }] },
         ],
       },

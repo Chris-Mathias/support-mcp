@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { readSupportStream } from '../../lib/chat-stream.js';
 import type { SupportStreamEvent } from '../../lib/chat-stream.js';
 
+function makeHeaders(contentType = 'text/event-stream'): Headers {
+  return { get: (name: string) => name === 'content-type' ? contentType : null } as unknown as Headers;
+}
+
 function makeResponse(chunks: string[], ok = true): Response {
   let i = 0;
   const stream = new ReadableStream({
@@ -13,7 +17,7 @@ function makeResponse(chunks: string[], ok = true): Response {
       }
     },
   });
-  return { ok, body: stream } as unknown as Response;
+  return { ok, body: stream, headers: makeHeaders() } as unknown as Response;
 }
 
 describe('readSupportStream', () => {
@@ -22,8 +26,13 @@ describe('readSupportStream', () => {
     await expect(readSupportStream(res, () => {})).rejects.toThrow('STREAM_REQUEST_FAILED');
   });
 
+  it('throws STREAM_INVALID_CONTENT_TYPE when content-type is not text/event-stream', async () => {
+    const res = { ok: true, body: null, headers: makeHeaders('application/json') } as unknown as Response;
+    await expect(readSupportStream(res, () => {})).rejects.toThrow('STREAM_INVALID_CONTENT_TYPE');
+  });
+
   it('throws STREAM_BODY_NOT_AVAILABLE when body is null', async () => {
-    const res = { ok: true, body: null } as unknown as Response;
+    const res = { ok: true, body: null, headers: makeHeaders() } as unknown as Response;
     await expect(readSupportStream(res, () => {})).rejects.toThrow('STREAM_BODY_NOT_AVAILABLE');
   });
 

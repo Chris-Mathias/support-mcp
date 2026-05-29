@@ -3,7 +3,6 @@ export type ChatSession = {
   projectId: string;
   title: string | null;
   createdAt: string;
-  closedAt?: string | null;
   deletedAt?: string | null;
 };
 

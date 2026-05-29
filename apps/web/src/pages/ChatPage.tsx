@@ -437,32 +437,6 @@ export function ChatPage() {
     }
   }
 
-  async function handleCloseSession(sessionId: string) {
-    if (!selectedProjectId) return;
-
-    abortSessionStream(sessionId);
-    clearSessionCache(sessionId);
-    setError(null);
-
-    try {
-      await api.patch(`/chat/sessions/${sessionId}/close`, {
-        projectId: selectedProjectId,
-      });
-
-      setProjectSessions(selectedProjectId, (current) =>
-        current.filter((session) => session.id !== sessionId),
-      );
-
-      if (activeSession?.id === sessionId) {
-        setProjectActiveSession(selectedProjectId, null);
-      }
-    } catch {
-      setError("Não foi possível fechar a sessão.");
-    } finally {
-      setOpenMenuSessionId(null);
-    }
-  }
-
   async function handleDeleteSession() {
     if (!selectedProjectId || !deletingSession) return;
 
