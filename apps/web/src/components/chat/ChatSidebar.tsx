@@ -1,4 +1,4 @@
-import { MoreVertical, Play, Trash2 } from "lucide-react";
+import { MoreVertical, Plus, Trash2 } from "lucide-react";
 import type { Project } from "../../types/project";
 import type { ChatSession } from "../../types/chat";
 import { cn } from "../../lib/cn";
@@ -7,11 +7,11 @@ import { ProjectSelect } from "../ui/ProjectSelect";
 type ChatSidebarProps = {
   projects: Project[];
   selectedProjectId: string;
-  loadingSession: boolean;
   sessions: ChatSession[];
   loadingSessions: boolean;
   activeSessionId: string | null;
   openMenuSessionId: string | null;
+  sendingBySession: Set<string>;
   onChangeProject: (projectId: string) => void;
   onStartSession: () => void;
   onSelectSession: (session: ChatSession) => void;
@@ -22,11 +22,11 @@ type ChatSidebarProps = {
 export function ChatSidebar({
   projects,
   selectedProjectId,
-  loadingSession,
   sessions,
   loadingSessions,
   activeSessionId,
   openMenuSessionId,
+  sendingBySession,
   onChangeProject,
   onStartSession,
   onSelectSession,
@@ -46,11 +46,10 @@ export function ChatSidebar({
           <button
             type="button"
             onClick={onStartSession}
-            disabled={loadingSession}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 font-medium text-white transition-colors hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 font-medium text-white transition-colors hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-500 dark:bg-zinc-700 dark:hover:bg-zinc-600"
           >
-            <Play size={18} />
-            {loadingSession ? "Iniciando..." : "Novo Chat"}
+            <Plus size={18} />
+            Novo Chat
           </button>
         ) : null}
       </div>
@@ -82,6 +81,7 @@ export function ChatSidebar({
               {sessions.map((session) => {
                 const isActive = activeSessionId === session.id;
                 const isMenuOpen = openMenuSessionId === session.id;
+                const isStreaming = sendingBySession.has(session.id);
 
                 return (
                   <div
@@ -102,8 +102,16 @@ export function ChatSidebar({
                         : "bg-white text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800",
                     )}
                   >
-                    <span className="min-w-0 flex-1 truncate text-left font-medium">
-                      {session.title || `Sessão ${session.id.slice(0, 8)}`}
+                    <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left font-medium">
+                      {isStreaming && !isActive ? (
+                        <span
+                          aria-label="Respondendo"
+                          className="h-2 w-2 flex-none animate-pulse rounded-full bg-zinc-400 dark:bg-zinc-500"
+                        />
+                      ) : null}
+                      <span className="truncate">
+                        {session.title ?? "Novo Chat"}
+                      </span>
                     </span>
 
                     <div className="relative ml-2">

@@ -24,36 +24,103 @@ export function ChatPage() {
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     return localStorage.getItem(selectedProjectStorageKey) ?? "";
   });
-  const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loadingSession, setLoadingSession] = useState(false);
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [streamingAssistantMessageId, setStreamingAssistantMessageId] =
-    useState<string | null>(null);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(
-    null,
-  );
-  const [deletingSession, setDeletingSession] = useState<ChatSession | null>(
-    null,
-  );
+  const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
+  const [deletingSession, setDeletingSession] = useState<ChatSession | null>(null);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const streamAbortRef = useRef<AbortController | null>(null);
+  // ─── Per-project state ────────────────────────────────────────────────────
+
+  // Sessions list per project — cached so switching back doesn't re-fetch
+  const [sessionsByProject, setSessionsByProject] = useState<Map<string, ChatSession[]>>(new Map());
+  // Active session per project — preserved when switching projects
+  const [activeSessionByProject, setActiveSessionByProject] = useState<Map<string, ChatSession | null>>(new Map());
+  // Which projects have had their sessions loaded (ref = no extra render)
+  const loadedProjectsRef = useRef<Set<string>>(new Set());
+
+  // ─── Per-session state ────────────────────────────────────────────────────
+
+  // Messages per session — streams update their own slot in background
+  const [messagesBySession, setMessagesBySession] = useState<Map<string, ChatMessage[]>>(new Map());
+  // Sessions whose stream is currently active
+  const [sendingBySession, setSendingBySession] = useState<Set<string>>(new Set());
+  // Streaming message ID per session
+  const [streamingBySession, setStreamingBySession] = useState<Map<string, string | null>>(new Map());
+  // AbortControllers per session
+  const streamsRef = useRef<Map<string, AbortController>>(new Map());
+
+  // Ref kept in sync with activeSession to avoid stale closure reads in async handlers
+  const activeSessionRef = useRef<ChatSession | null>(null);
+
+  // ─── Derived values (same shape as before — child props unchanged) ────────
+
+  const sessions = sessionsByProject.get(selectedProjectId) ?? [];
+  const activeSession = activeSessionByProject.get(selectedProjectId) ?? null;
+  const activeSessionId = activeSession?.id ?? "";
+  const messages = messagesBySession.get(activeSessionId) ?? [];
+  const sendingMessage = sendingBySession.has(activeSessionId);
+  const streamingAssistantMessageId = streamingBySession.get(activeSessionId) ?? null;
 
   const canSendMessage =
     Boolean(selectedProjectId) && Boolean(content.trim()) && !sendingMessage;
 
-  function abortActiveStream() {
-    streamAbortRef.current?.abort();
-    streamAbortRef.current = null;
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
+  // ─── Per-project helpers ──────────────────────────────────────────────────
+
+  function setProjectSessions(
+    projectId: string,
+    updater: (prev: ChatSession[]) => ChatSession[],
+  ) {
+    setSessionsByProject((map) => {
+      const next = new Map(map);
+      next.set(projectId, updater(next.get(projectId) ?? []));
+      return next;
+    });
   }
+
+  function setProjectActiveSession(projectId: string, session: ChatSession | null) {
+    setActiveSessionByProject((map) => {
+      const next = new Map(map);
+      next.set(projectId, session);
+      return next;
+    });
+  }
+
+  // ─── Per-session helpers ──────────────────────────────────────────────────
+
+  function setSessionMessages(
+    sessionId: string,
+    updater: (prev: ChatMessage[]) => ChatMessage[],
+  ) {
+    setMessagesBySession((map) => {
+      const next = new Map(map);
+      next.set(sessionId, updater(next.get(sessionId) ?? []));
+      return next;
+    });
+  }
+
+  function abortSessionStream(sessionId: string) {
+    streamsRef.current.get(sessionId)?.abort();
+    streamsRef.current.delete(sessionId);
+  }
+
+  function clearSessionCache(sessionId: string) {
+    abortSessionStream(sessionId);
+    setMessagesBySession((m) => { const n = new Map(m); n.delete(sessionId); return n; });
+    setSendingBySession((s) => { const n = new Set(s); n.delete(sessionId); return n; });
+    setStreamingBySession((m) => { const n = new Map(m); n.delete(sessionId); return n; });
+  }
+
+  // ─── Effects ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -62,7 +129,6 @@ export function ChatPage() {
   useEffect(() => {
     const element = textareaRef.current;
     if (!element) return;
-
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 128)}px`;
     element.style.overflowY = element.scrollHeight > 128 ? "auto" : "hidden";
@@ -100,6 +166,8 @@ export function ChatPage() {
     };
   }, []);
 
+  // ─── Data fetching ────────────────────────────────────────────────────────
+
   async function loadProjects() {
     const response = await api.get<Project[]>("/projects");
     setProjects(response.data);
@@ -112,7 +180,8 @@ export function ChatPage() {
       const response = await api.get<ChatSession[]>(
         `/projects/${projectId}/chat/sessions`,
       );
-      setSessions(response.data);
+      setProjectSessions(projectId, () => response.data);
+      loadedProjectsRef.current.add(projectId);
     } catch {
       setError("Não foi possível carregar o histórico de sessões.");
     } finally {
@@ -120,61 +189,36 @@ export function ChatPage() {
     }
   }
 
-  async function loadMessages(sessionId: string, projectId: string) {
-    const response = await api.get<ChatMessage[]>(
-      `/chat/sessions/${sessionId}/messages`,
-      { params: { projectId } },
-    );
-    setMessages(response.data);
-  }
+  // ─── Session actions ──────────────────────────────────────────────────────
 
-  async function handleStartSession() {
-    if (!selectedProjectId || loadingSession) return;
+  function handleStartSession() {
+    if (!selectedProjectId) return;
 
-    setLoadingSession(true);
+    if (activeSession) abortSessionStream(activeSession.id);
+    setProjectActiveSession(selectedProjectId, null);
     setError(null);
     setOpenMenuSessionId(null);
-
-    try {
-      const response = await api.post<ChatSession>("/chat/sessions", {
-        projectId: selectedProjectId,
-      });
-
-      setActiveSession(response.data);
-      setMessages([]);
-
-      setSessions((current) => {
-        const alreadyExists = current.some(
-          (session) => session.id === response.data.id,
-        );
-
-        return alreadyExists ? current : [response.data, ...current];
-      });
-
-      textareaRef.current?.focus();
-    } catch {
-      setError("Não foi possível iniciar a sessão.");
-    } finally {
-      setLoadingSession(false);
-    }
+    textareaRef.current?.focus();
   }
 
   async function handleSendMessage(event?: FormEvent) {
     event?.preventDefault();
 
     const question = content.trim();
+    const capturedProjectId = selectedProjectId;
     let currentStreamingMessageId: string | null = null;
+    let sessionId: string | null = null;
 
-    if (!selectedProjectId || !question || sendingMessage) {
+    if (!capturedProjectId || !question || sendingMessage) {
       return;
     }
 
-    abortActiveStream();
+    // Abort any in-progress stream for this specific session (re-send scenario)
+    if (activeSession) abortSessionStream(activeSession.id);
+
     const controller = new AbortController();
-    streamAbortRef.current = controller;
 
     setContent("");
-    setSendingMessage(true);
     setError(null);
 
     try {
@@ -182,29 +226,36 @@ export function ChatPage() {
 
       if (!session) {
         const sessionResponse = await api.post<ChatSession>("/chat/sessions", {
-          projectId: selectedProjectId,
+          projectId: capturedProjectId,
         });
 
         session = sessionResponse.data;
-        setActiveSession(session);
-        setMessages([]);
+        setProjectActiveSession(capturedProjectId, session);
+        activeSessionRef.current = session;
 
-        setSessions((current) => {
+        setProjectSessions(capturedProjectId, (current) => {
           const alreadyExists = current.some((item) => item.id === session!.id);
           return alreadyExists ? current : [session!, ...current];
         });
       }
 
+      sessionId = session.id;
+      const sid = sessionId; // non-nullable alias for use within this block
+
+      // Register the stream before any await so concurrent sends see it
+      streamsRef.current.set(sid, controller);
+      setSendingBySession((s) => new Set(s).add(sid));
+
       const optimisticMessage: ChatMessage = {
-        id: `temp-${Date.now()}`,
+        id: `temp-${crypto.randomUUID()}`,
         role: "user",
         content: question,
       } as ChatMessage;
 
-      const streamingMessageId = `assistant-stream-${Date.now()}`;
+      const streamingMessageId = `assistant-stream-${crypto.randomUUID()}`;
       const streamingAssistantMessage: ChatMessage = {
         id: streamingMessageId,
-        sessionId: session.id,
+        sessionId: sid,
         role: "assistant",
         content: "",
         createdAt: new Date().toISOString(),
@@ -212,24 +263,19 @@ export function ChatPage() {
 
       currentStreamingMessageId = streamingMessageId;
 
-      setMessages((currentMessages) => [
-        ...currentMessages,
+      setSessionMessages(sid, (prev) => [
+        ...prev,
         optimisticMessage,
         streamingAssistantMessage,
       ]);
-      setStreamingAssistantMessageId(streamingMessageId);
+      setStreamingBySession((m) => new Map(m).set(sid, streamingMessageId));
 
       const response = await fetch(
-        `${api.defaults.baseURL}/chat/sessions/${session.id}/ask/stream`,
+        `${api.defaults.baseURL}/chat/sessions/${sid}/ask/stream`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            projectId: selectedProjectId,
-            question,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: capturedProjectId, question }),
           credentials: "include",
           signal: controller.signal,
         },
@@ -241,17 +287,13 @@ export function ChatPage() {
         response,
         (streamEvent) => {
           if (streamEvent.event === "delta") {
-            setMessages((currentMessages) =>
-              currentMessages.map((message) =>
+            setSessionMessages(sid, (msgs) =>
+              msgs.map((message) =>
                 message.id === streamingMessageId
-                  ? {
-                      ...message,
-                      content: streamEvent.data.content,
-                    }
+                  ? { ...message, content: streamEvent.data.content }
                   : message,
               ),
             );
-
             return;
           }
 
@@ -269,9 +311,9 @@ export function ChatPage() {
         controller.signal,
       );
 
-      // Stream abortado intencionalmente (troca de contexto)
+      // Stream abortado intencionalmente (exclusão de sessão)
       if (controller.signal.aborted) {
-        setMessages((msgs) =>
+        setSessionMessages(sid, (msgs) =>
           msgs.filter((m) => m.id !== currentStreamingMessageId),
         );
         return;
@@ -284,19 +326,23 @@ export function ChatPage() {
       const completedPayload = finalPayload as AskQuestionResponse;
 
       if (completedPayload.session) {
-        setActiveSession(completedPayload.session);
-
-        setSessions((current) =>
+        // Always update the title in the sidebar list for the originating project
+        setProjectSessions(capturedProjectId, (current) =>
           current.map((item) =>
             item.id === completedPayload.session!.id
               ? completedPayload.session!
               : item,
           ),
         );
+
+        // Only update activeSession if the user is still viewing this session
+        if (activeSessionRef.current?.id === sid) {
+          setProjectActiveSession(capturedProjectId, completedPayload.session);
+        }
       }
 
-      setMessages((currentMessages) =>
-        currentMessages.map((message) =>
+      setSessionMessages(sid, (msgs) =>
+        msgs.map((message) =>
           message.id === streamingMessageId
             ? completedPayload.assistantMessage
             : message,
@@ -305,41 +351,49 @@ export function ChatPage() {
     } catch (error) {
       // AbortError: fetch abortado antes de conectar — cleanup silencioso
       if (error instanceof DOMException && error.name === "AbortError") {
-        setMessages((msgs) =>
-          msgs.filter((m) => m.id !== currentStreamingMessageId),
-        );
+        if (sessionId) {
+          setSessionMessages(sessionId, (msgs) =>
+            msgs.filter((m) => m.id !== currentStreamingMessageId),
+          );
+        }
         return;
       }
 
       setContent(question);
-      setMessages((currentMessages) =>
-        currentMessages.filter(
-          (message) => message.id !== currentStreamingMessageId,
-        ),
-      );
+      if (sessionId) {
+        setSessionMessages(sessionId, (msgs) =>
+          msgs.filter((m) => m.id !== currentStreamingMessageId),
+        );
+      }
       setError("Não foi possível enviar a mensagem.");
     } finally {
-      streamAbortRef.current = null;
-      setSendingMessage(false);
-      setStreamingAssistantMessageId(null);
-      textareaRef.current?.focus();
+      if (sessionId) {
+        streamsRef.current.delete(sessionId);
+        setSendingBySession((s) => { const n = new Set(s); n.delete(sessionId!); return n; });
+        setStreamingBySession((m) => { const n = new Map(m); n.set(sessionId!, null); return n; });
+        // Only refocus if the user is still viewing this session
+        if (activeSessionRef.current?.id === sessionId) {
+          textareaRef.current?.focus();
+        }
+      }
     }
   }
 
   function handleChangeProject(projectId: string) {
-    abortActiveStream();
+    // Do NOT abort streams — let them continue in background
     setSelectedProjectId(projectId);
-    setActiveSession(null);
-    setMessages([]);
-    setSessions([]);
+    setContent("");
     setError(null);
     setOpenMenuSessionId(null);
 
     if (projectId) {
       localStorage.setItem(selectedProjectStorageKey, projectId);
-      loadSessions(projectId).catch(() => {
-        setError("Não foi possível carregar o histórico de sessões.");
-      });
+      // Only fetch if this project's sessions haven't been loaded yet
+      if (!loadedProjectsRef.current.has(projectId)) {
+        loadSessions(projectId).catch(() => {
+          setError("Não foi possível carregar o histórico de sessões.");
+        });
+      }
     } else {
       localStorage.removeItem(selectedProjectStorageKey);
     }
@@ -348,14 +402,25 @@ export function ChatPage() {
   async function handleSelectSession(session: ChatSession) {
     if (!selectedProjectId || activeSession?.id === session.id) return;
 
-    abortActiveStream();
-    setActiveSession(session);
+    // Do NOT abort — let any in-progress stream continue in the background
+    setProjectActiveSession(selectedProjectId, session);
     setError(null);
     setOpenMenuSessionId(null);
+
+    // If messages are already cached (active stream or previous visit), just switch the view
+    if (messagesBySession.has(session.id)) {
+      textareaRef.current?.focus();
+      return;
+    }
+
     setLoadingMessages(true);
 
     try {
-      await loadMessages(session.id, selectedProjectId);
+      const response = await api.get<ChatMessage[]>(
+        `/chat/sessions/${session.id}/messages`,
+        { params: { projectId: selectedProjectId } },
+      );
+      setSessionMessages(session.id, () => response.data);
       textareaRef.current?.focus();
     } catch {
       setError("Não foi possível carregar as mensagens da sessão.");
@@ -367,10 +432,8 @@ export function ChatPage() {
   async function handleCloseSession(sessionId: string) {
     if (!selectedProjectId) return;
 
-    if (activeSession?.id === sessionId) {
-      abortActiveStream();
-    }
-
+    abortSessionStream(sessionId);
+    clearSessionCache(sessionId);
     setError(null);
 
     try {
@@ -378,13 +441,12 @@ export function ChatPage() {
         projectId: selectedProjectId,
       });
 
-      setSessions((current) =>
+      setProjectSessions(selectedProjectId, (current) =>
         current.filter((session) => session.id !== sessionId),
       );
 
       if (activeSession?.id === sessionId) {
-        setActiveSession(null);
-        setMessages([]);
+        setProjectActiveSession(selectedProjectId, null);
       }
     } catch {
       setError("Não foi possível fechar a sessão.");
@@ -396,25 +458,24 @@ export function ChatPage() {
   async function handleDeleteSession() {
     if (!selectedProjectId || !deletingSession) return;
 
-    if (activeSession?.id === deletingSession.id) {
-      abortActiveStream();
-    }
+    const sessionId = deletingSession.id;
+    abortSessionStream(sessionId);
+    clearSessionCache(sessionId);
 
     setIsDeletingSession(true);
     setError(null);
 
     try {
-      await api.delete(`/chat/sessions/${deletingSession.id}`, {
+      await api.delete(`/chat/sessions/${sessionId}`, {
         data: { projectId: selectedProjectId },
       });
 
-      setSessions((current) =>
-        current.filter((session) => session.id !== deletingSession.id),
+      setProjectSessions(selectedProjectId, (current) =>
+        current.filter((session) => session.id !== sessionId),
       );
 
-      if (activeSession?.id === deletingSession.id) {
-        setActiveSession(null);
-        setMessages([]);
+      if (activeSession?.id === sessionId) {
+        setProjectActiveSession(selectedProjectId, null);
       }
     } catch {
       setError("Não foi possível excluir a conversa.");
@@ -426,60 +487,60 @@ export function ChatPage() {
 
   return (
     <>
-    <WorkspacePage
-      sidebar={
-        <ChatSidebar
-          projects={projects}
+      <WorkspacePage
+        sidebar={
+          <ChatSidebar
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            sessions={sessions}
+            loadingSessions={loadingSessions}
+            activeSessionId={activeSession?.id ?? null}
+            openMenuSessionId={openMenuSessionId}
+            sendingBySession={sendingBySession}
+            onChangeProject={handleChangeProject}
+            onStartSession={handleStartSession}
+            onSelectSession={handleSelectSession}
+            onRequestDeleteSession={(session) => setDeletingSession(session)}
+            onToggleSessionMenu={(sessionId) =>
+              setOpenMenuSessionId((current) =>
+                current === sessionId ? null : sessionId,
+              )
+            }
+          />
+        }
+      >
+        {error ? <AlertBanner className="m-4">{error}</AlertBanner> : null}
+
+        <ChatMessageList
           selectedProjectId={selectedProjectId}
-          loadingSession={loadingSession}
-          sessions={sessions}
-          loadingSessions={loadingSessions}
-          activeSessionId={activeSession?.id ?? null}
-          openMenuSessionId={openMenuSessionId}
-          onChangeProject={handleChangeProject}
-          onStartSession={handleStartSession}
-          onSelectSession={handleSelectSession}
-          onRequestDeleteSession={(session) => setDeletingSession(session)}
-          onToggleSessionMenu={(sessionId) =>
-            setOpenMenuSessionId((current) =>
-              current === sessionId ? null : sessionId,
-            )
-          }
+          loadingMessages={loadingMessages}
+          hasActiveSession={Boolean(activeSession)}
+          messages={messages}
+          sendingMessage={sendingMessage}
+          streamingAssistantMessageId={streamingAssistantMessageId}
+          messagesEndRef={messagesEndRef}
         />
-      }
-    >
-      {error ? <AlertBanner className="m-4">{error}</AlertBanner> : null}
 
-      <ChatMessageList
-        selectedProjectId={selectedProjectId}
-        loadingMessages={loadingMessages}
-        hasActiveSession={Boolean(activeSession)}
-        messages={messages}
-        sendingMessage={sendingMessage}
-        streamingAssistantMessageId={streamingAssistantMessageId}
-        messagesEndRef={messagesEndRef}
-      />
+        <ChatComposer
+          value={content}
+          canSendMessage={canSendMessage}
+          disabled={!selectedProjectId || sendingMessage}
+          textareaRef={textareaRef}
+          loading={sendingMessage}
+          onChange={setContent}
+          onSubmit={handleSendMessage}
+        />
+      </WorkspacePage>
 
-      <ChatComposer
-        value={content}
-        canSendMessage={canSendMessage}
-        disabled={!selectedProjectId || sendingMessage}
-        textareaRef={textareaRef}
-        loading={sendingMessage}
-        onChange={setContent}
-        onSubmit={handleSendMessage}
-      />
-    </WorkspacePage>
-
-    {deletingSession ? (
-      <ConfirmDialog
-        title="Excluir conversa?"
-        description={`"${deletingSession.title ?? `Sessão ${deletingSession.id.slice(0, 8)}`}" será movida para a lixeira e removida permanentemente após 30 dias.`}
-        loading={isDeletingSession}
-        onConfirm={handleDeleteSession}
-        onCancel={() => setDeletingSession(null)}
-      />
-    ) : null}
+      {deletingSession ? (
+        <ConfirmDialog
+          title="Excluir conversa?"
+          description={`"${deletingSession.title ?? "Novo Chat"}" será movida para a lixeira e removida permanentemente após 30 dias.`}
+          loading={isDeletingSession}
+          onConfirm={handleDeleteSession}
+          onCancel={() => setDeletingSession(null)}
+        />
+      ) : null}
     </>
   );
 }
