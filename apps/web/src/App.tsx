@@ -91,10 +91,18 @@ export function App() {
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">
-        {activeTab === "chat" ? <ChatPage /> : null}
-        {activeTab === "projects" ? <ProjectsPage /> : null}
-        {activeTab === "documents" ? <DocumentsPage /> : null}
-        {activeTab === "gitlab" ? <GitlabIntegrationPage /> : null}
+        <div className={activeTab === "chat" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
+          <ChatPage />
+        </div>
+        <div className={activeTab === "projects" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
+          <ProjectsPage />
+        </div>
+        <div className={activeTab === "documents" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
+          <DocumentsPage />
+        </div>
+        <div className={activeTab === "gitlab" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
+          <GitlabIntegrationPage />
+        </div>
       </main>
     </div>
   );

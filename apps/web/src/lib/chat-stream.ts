@@ -63,6 +63,11 @@ export async function readSupportStream<TDone>(
     throw new Error("STREAM_REQUEST_FAILED");
   }
 
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/event-stream")) {
+    throw new Error("STREAM_INVALID_CONTENT_TYPE");
+  }
+
   if (!response.body) {
     throw new Error("STREAM_BODY_NOT_AVAILABLE");
   }

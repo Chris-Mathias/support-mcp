@@ -6,6 +6,7 @@ type AskQuestionParams = {
   sessionId: string;
   projectId: string;
   question: string;
+  signal?: AbortSignal;
   logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
 };
 
@@ -74,6 +75,7 @@ export class SupportService {
         return this.llmService.generateSupportAnswerWithTools({
           messages: messagesForLlm,
           tools,
+          signal: params.signal,
           logger: params.logger,
           onTextDelta: handlers?.onTextDelta,
           onToolCall: handlers?.onToolCall,
@@ -82,10 +84,18 @@ export class SupportService {
       },
     );
 
+    // If the client disconnected during LLM generation, skip persistence entirely.
+    if (params.signal?.aborted) throw new Error("STREAM_ABORTED");
+
     // Title generation is best-effort: failure must not prevent message persistence.
     const generatedTitle = !session.title
-      ? await this.llmService.generateChatTitle({ question: params.question, answer }).catch(() => null)
+      ? await this.llmService
+          .generateChatTitle({ question: params.question, answer }, params.signal)
+          .catch(() => null)
       : null;
+
+    // Check again — title gen is fast but client may have disconnected during it.
+    if (params.signal?.aborted) throw new Error("STREAM_ABORTED");
 
     // Persist user message + assistant message + optional title update atomically.
     const { userMessage, assistantMessage, updatedSession } = await prisma.$transaction(async (tx) => {

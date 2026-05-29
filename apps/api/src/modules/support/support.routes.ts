@@ -95,6 +95,10 @@ export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOpti
     });
     reply.raw.flushHeaders?.();
 
+    const abortController = new AbortController();
+    const onClientClose = () => abortController.abort();
+    reply.raw.once("close", onClientClose);
+
     const sendEvent = (event: string, data: unknown) => {
       if (reply.raw.writableEnded || reply.raw.destroyed) {
         return;
@@ -110,6 +114,7 @@ export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOpti
           sessionId: parsedParams.data.sessionId,
           projectId: parsed.data.projectId,
           question: parsed.data.question,
+          signal: abortController.signal,
           logger: request.log,
         },
         {
@@ -130,6 +135,11 @@ export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOpti
 
       sendEvent("done", result);
     } catch (error) {
+      if (abortController.signal.aborted) {
+        // Client disconnected — no SSE to send, no logging needed.
+        return;
+      }
+
       if (!(error instanceof Error)) throw error;
 
       if (error.message === "SESSION_NOT_FOUND") {
@@ -147,7 +157,11 @@ export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOpti
         request.log.error(error);
       }
     } finally {
+      reply.raw.off("close", onClientClose);
       if (!reply.raw.writableEnded && !reply.raw.destroyed) {
+        if (!abortController.signal.aborted) {
+          reply.raw.write("\n\n");
+        }
         reply.raw.end();
       }
     }

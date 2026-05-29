@@ -68,6 +68,7 @@ export class LlmService {
   async generateSupportAnswerWithTools(params: {
     messages: ChatMessageInput[];
     tools: ToolRuntime;
+    signal?: AbortSignal;
     logger?: { debug: (obj: Record<string, unknown>, msg: string) => void };
   } & SupportAnswerHandlers) {
     const toolHistory: ToolCallRecord[] = [];
@@ -86,8 +87,9 @@ export class LlmService {
           })),
         ],
         tools: toolDefinitions,
-      }, params.onTextDelta);
+      }, params.onTextDelta, params.signal);
     } catch (err) {
+      if (params.signal?.aborted) throw err;
       params.logger?.debug(
         { toolDefinitions, error: err instanceof Error ? err.message : String(err) },
         "llm:tool_definitions_error",
@@ -150,7 +152,7 @@ export class LlmService {
         previous_response_id: response.id,
         input: toolOutputs,
         tools: toolDefinitions,
-      }, params.onTextDelta);
+      }, params.onTextDelta, params.signal);
     }
 
     const pendingCalls = response.output.filter(
@@ -177,7 +179,7 @@ export class LlmService {
       model: this.model,
       previous_response_id: response.id,
       input: fallbackOutputs,
-    }, params.onTextDelta);
+    }, params.onTextDelta, params.signal);
 
     return {
       answer: finalResponse.output_text.trim(),
@@ -185,7 +187,7 @@ export class LlmService {
     };
   }
 
-  async generateChatTitle(params: { question: string; answer: string }) {
+  async generateChatTitle(params: { question: string; answer: string }, signal?: AbortSignal) {
     const titleModel = process.env.LLM_TITLE_MODEL || "gpt-5-nano";
 
     const response = await this.client.responses.create({
@@ -207,7 +209,7 @@ export class LlmService {
           ].join("\n"),
         },
       ],
-    });
+    }, { signal });
 
     return normalizeChatTitle(response.output_text);
   }
@@ -237,11 +239,12 @@ export class LlmService {
   private async createResponse(
     params: ResponseCreateParamsBase,
     onTextDelta?: (delta: string, content: string) => void,
+    signal?: AbortSignal,
   ): Promise<Response> {
     const stream = await this.client.responses.create({
       ...params,
       stream: true,
-    });
+    }, { signal });
 
     let response: Response | null = null;
     let content = "";

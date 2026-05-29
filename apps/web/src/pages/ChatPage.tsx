@@ -74,6 +74,14 @@ export function ChatPage() {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
 
+  useEffect(() => {
+    return () => {
+      for (const controller of streamsRef.current.values()) {
+        controller.abort();
+      }
+    };
+  }, []);
+
   // ─── Per-project helpers ──────────────────────────────────────────────────
 
   function setProjectSessions(
