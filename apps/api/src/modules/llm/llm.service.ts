@@ -74,17 +74,26 @@ export class LlmService {
 
     const toolDefinitions = buildOpenAiToolDefinitions({});
 
-    let response = await this.createResponse({
-      model: this.model,
-      input: [
-        { role: "system", content: systemPrompt },
-        ...params.messages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-      ],
-      tools: toolDefinitions,
-    }, params.onTextDelta);
+    let response: Response;
+    try {
+      response = await this.createResponse({
+        model: this.model,
+        input: [
+          { role: "system", content: systemPrompt },
+          ...params.messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        ],
+        tools: toolDefinitions,
+      }, params.onTextDelta);
+    } catch (err) {
+      params.logger?.debug(
+        { toolDefinitions, error: err instanceof Error ? err.message : String(err) },
+        "llm:tool_definitions_error",
+      );
+      throw err;
+    }
 
     for (let step = 0; step < 6; step++) {
       const functionCalls = response.output.filter(

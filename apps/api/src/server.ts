@@ -31,6 +31,7 @@ import {
   renewSessionToken,
   buildSessionCookieOptions,
   COOKIE_NAME,
+  pruneSessionCache,
 } from "./lib/session.js";
 
 // trustProxy: this container only receives traffic via the Coolify/Traefik
@@ -145,9 +146,12 @@ documentService.markStuckDocumentsAsFailed(5).catch((err) => {
   app.log.warn({ err }, "Failed to mark stuck documents as failed on startup");
 });
 
+pruneSessionCache();
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 setInterval(
   () => {
+    pruneSessionCache();
     chatService.purgeExpiredSessions(retentionDays).catch((err) => {
       app.log.warn({ err }, "Failed to purge expired chat sessions");
     });

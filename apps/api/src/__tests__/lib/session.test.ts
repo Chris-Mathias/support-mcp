@@ -5,6 +5,7 @@ import {
   verifySessionToken,
   deleteSessionToken,
   clearSessionCache,
+  pruneSessionCache,
 } from '../../lib/session.js';
 
 function makePrisma(sessionRow?: { expiresAt: Date } | null) {
@@ -123,5 +124,31 @@ describe('deleteSessionToken', () => {
     await deleteSessionToken(token, makePrisma());
     const result = await verifySessionToken(token, makePrisma(null));
     expect(result.valid).toBe(false);
+  });
+});
+
+describe('pruneSessionCache', () => {
+  it('remove entradas com expiresAt no passado', async () => {
+    const token = await createSessionToken(makePrisma());
+    pruneSessionCache(Date.now() + 8 * 24 * 60 * 60 * 1000);
+    const result = await verifySessionToken(token, makePrisma(null));
+    expect(result.valid).toBe(false);
+  });
+
+  it('remove entradas com cachedUntil no passado', async () => {
+    const token = await createSessionToken(makePrisma());
+    pruneSessionCache(Date.now() + 31_000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const result = await verifySessionToken(token, makePrisma({ expiresAt }));
+    expect(result.valid).toBe(true);
+  });
+
+  it('não remove entradas ainda válidas', async () => {
+    const token = await createSessionToken(makePrisma());
+    pruneSessionCache(Date.now());
+    const prisma = makePrisma();
+    const result = await verifySessionToken(token, prisma);
+    expect(result.valid).toBe(true);
+    expect(prisma.session.findUnique).not.toHaveBeenCalled();
   });
 });

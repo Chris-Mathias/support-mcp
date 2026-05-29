@@ -56,6 +56,14 @@ export function clearSessionCache(): void {
   sessionCache.clear();
 }
 
+export function pruneSessionCache(now = Date.now()): void {
+  for (const [key, entry] of sessionCache) {
+    if (entry.expiresAt < now || entry.cachedUntil < now) {
+      sessionCache.delete(key);
+    }
+  }
+}
+
 export async function createSessionToken(prisma: PrismaClient): Promise<string> {
   const token = sign(randomBytes(32).toString("hex"));
   const hash = tokenHash(token);
