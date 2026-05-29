@@ -12,7 +12,6 @@ export type ProjectDocument = {
   filePath: string;
   mimeType?: string | null;
   fileSize?: number | null;
-  extractedText?: string | null;
   pageCount?: number | null;
   summary?: string | null;
   processingStatus: DocumentProcessingStatus;

@@ -30,6 +30,7 @@ type GitlabRepositoryFileResponse = {
 };
 
 const MAX_TREE_PAGE_SIZE = 100;
+const MAX_TREE_PAGES = 50; // 5 000 arquivos máximo por busca
 const MAX_README_PREVIEW_CHARS = 4000;
 const MAX_TOP_LANGUAGES = 8;
 const MAX_CENTRAL_DIRECTORIES = 12;
@@ -494,11 +495,13 @@ async function fetchAllGitlabTree(params: {
   token: string;
   ref: string;
   recursive?: boolean;
-}) {
+  maxPages?: number;
+}): Promise<{ items: GitlabTreeItem[]; truncated: boolean }> {
+  const limit = params.maxPages ?? MAX_TREE_PAGES;
   const allItems: GitlabTreeItem[] = [];
   let page = 1;
 
-  while (page > 0) {
+  while (page > 0 && page <= limit) {
     const { items, nextPage } = await fetchGitlabTreePage({
       ...params,
       page,
@@ -508,7 +511,7 @@ async function fetchAllGitlabTree(params: {
     page = nextPage;
   }
 
-  return allItems;
+  return { items: allItems, truncated: page > 0 };
 }
 
 async function fetchReadmeFromRoot(params: {
@@ -568,7 +571,10 @@ export async function getRepositoryOverview(input: unknown) {
   const baseUrl = gitlabApiBase(integration.repoUrl);
 
   try {
-    const [rootTree, recursiveTree] = await Promise.all([
+    const [
+      { items: rootTree, truncated: rootTruncated },
+      { items: recursiveTree, truncated: recursiveTruncated },
+    ] = await Promise.all([
       fetchAllGitlabTree({
         baseUrl,
         encodedProject,
@@ -584,6 +590,8 @@ export async function getRepositoryOverview(input: unknown) {
         recursive: true,
       }),
     ]);
+
+    const truncated = rootTruncated || recursiveTruncated;
 
     const allFiles = recursiveTree
       .filter((item) => item.type === "blob")
@@ -620,6 +628,7 @@ export async function getRepositoryOverview(input: unknown) {
         rootItems: rootTree.length,
         rootFiles: rootFiles.length,
         rootDirectories: rootTree.filter((item) => item.type === "tree").length,
+        truncated,
       },
       readme: {
         found: readme.found,

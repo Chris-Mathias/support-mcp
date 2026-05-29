@@ -62,7 +62,6 @@ model ProjectDocument {
   filePath         String
   mimeType         String?
   fileSize         Int?
-  extractedText    String?
   pageCount        Int?
   summary          String?
   processingStatus DocumentProcessingStatus @default(PENDING)

@@ -31,13 +31,16 @@ export async function readFullDocument(input: unknown) {
       filePath: true,
       mimeType: true,
       fileSize: true,
-      extractedText: true,
       pageCount: true,
       summary: true,
       processingStatus: true,
       processingError: true,
       createdAt: true,
       updatedAt: true,
+      chunks: {
+        orderBy: { chunkIndex: "asc" },
+        select: { text: true },
+      },
       _count: {
         select: {
           chunks: true,
@@ -51,11 +54,10 @@ export async function readFullDocument(input: unknown) {
   }
 
   const chunkCount = document._count.chunks;
-  const extractedText = normalizeText(document.extractedText ?? "");
-  const isUsable =
-    document.processingStatus === "READY" &&
-    extractedText.length > 0 &&
-    chunkCount > 0;
+  const extractedText = normalizeText(
+    document.chunks.map((c) => c.text).join("\n\n"),
+  );
+  const isUsable = document.processingStatus === "READY" && chunkCount > 0;
 
   if (!isUsable) {
     return {
@@ -76,7 +78,6 @@ export async function readFullDocument(input: unknown) {
       truncated: false,
       notes: buildUnavailableNotes({
         processingStatus: document.processingStatus,
-        hasExtractedText: extractedText.length > 0,
         chunkCount,
       }),
     };
@@ -124,7 +125,6 @@ function normalizeText(text: string) {
 
 function buildUnavailableNotes(params: {
   processingStatus: string;
-  hasExtractedText: boolean;
   chunkCount: number;
 }) {
   const notes: string[] = [];
@@ -133,10 +133,6 @@ function buildUnavailableNotes(params: {
     notes.push(
       `O documento não está disponível para leitura integral porque seu processingStatus é ${params.processingStatus}.`,
     );
-  }
-
-  if (!params.hasExtractedText) {
-    notes.push("O documento não possui texto extraído disponível.");
   }
 
   if (params.chunkCount === 0) {

@@ -33,7 +33,6 @@ export async function getDocumentOverview(input: unknown) {
       filePath: true,
       mimeType: true,
       fileSize: true,
-      extractedText: true,
       pageCount: true,
       summary: true,
       processingStatus: true,
@@ -42,7 +41,7 @@ export async function getDocumentOverview(input: unknown) {
       updatedAt: true,
       chunks: {
         orderBy: { chunkIndex: "asc" },
-        take: includeChunkPreviews ? maxChunkPreviews : 0,
+        take: Math.max(includeChunkPreviews ? maxChunkPreviews : 0, 20),
         select: {
           id: true,
           chunkIndex: true,
@@ -65,13 +64,10 @@ export async function getDocumentOverview(input: unknown) {
   }
 
   const chunkCount = document._count.chunks;
-  const isUsable =
-    document.processingStatus === "READY" &&
-    !!document.extractedText &&
-    chunkCount > 0;
+  const isUsable = document.processingStatus === "READY" && chunkCount > 0;
 
-  const extractedText = document.extractedText ?? "";
-  const normalizedText = normalizeText(extractedText);
+  const rawText = document.chunks.map((c) => c.text).join("\n\n");
+  const normalizedText = normalizeText(rawText);
 
   const detectedTitle = detectTitle(document.fileName, normalizedText);
   const keywords = extractKeywords(normalizedText);
@@ -82,7 +78,7 @@ export async function getDocumentOverview(input: unknown) {
   );
 
   const chunkPreviews = includeChunkPreviews
-    ? document.chunks.map((chunk) => ({
+    ? document.chunks.slice(0, maxChunkPreviews).map((chunk) => ({
         chunkId: chunk.id,
         chunkIndex: chunk.chunkIndex,
         pageNumberStart: chunk.pageNumberStart,

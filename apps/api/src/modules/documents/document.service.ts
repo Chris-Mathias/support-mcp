@@ -99,7 +99,6 @@ export class DocumentService {
         await prisma.projectDocument.update({
           where: { id: documentId },
           data: {
-            extractedText: "",
             pageCount: null,
             summary: null,
             processingStatus: "UNSUPPORTED",
@@ -113,7 +112,6 @@ export class DocumentService {
         prisma.projectDocument.update({
           where: { id: documentId },
           data: {
-            extractedText,
             pageCount,
             summary,
             processingStatus: "READY",
