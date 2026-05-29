@@ -1,4 +1,17 @@
 import "dotenv/config";
+import { z } from "zod";
+
+const envSchema = z.object({
+  DATABASE_URL:    z.string().url(),
+  SESSION_SECRET:  z.string().min(32),
+  ENCRYPTION_KEY:  z.string().length(64).regex(/^[0-9a-f]+$/i),
+  APP_PASSWORD:    z.string().min(1),
+  LLM_API_KEY:     z.string().min(1),
+  ALLOWED_ORIGINS: z.string().min(1),
+});
+
+envSchema.parse(process.env);
+
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";

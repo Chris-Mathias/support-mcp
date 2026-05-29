@@ -10,12 +10,11 @@ type DocumentRouteOptions = {
   rateLimitWindow: string;
 };
 
-const documentService = new DocumentService();
-
 const INVALID_PARAMS = "Parâmetros inválidos";
 const MAGIC_PDF = Buffer.from("%PDF-", "ascii");
 
 export async function documentRoutes(app: FastifyInstance, opts: DocumentRouteOptions) {
+  const documentService = new DocumentService();
   app.post("/projects/:projectId/documents", { config: { rateLimit: { max: opts.rateLimitUpload, timeWindow: opts.rateLimitWindow } } }, async (request, reply) => {
     const parsedParams = projectParamsSchema.safeParse(request.params);
 

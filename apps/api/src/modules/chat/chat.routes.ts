@@ -10,11 +10,10 @@ import {
 } from "./chat.schemas.js";
 import { ChatService } from "./chat.service.js";
 
-const chatService = new ChatService();
-
 const INVALID_PARAMS = "Parâmetros inválidos";
 
 export async function chatRoutes(app: FastifyInstance) {
+  const chatService = new ChatService();
   app.post("/chat/sessions", async (request, reply) => {
     const parsed = createChatSessionSchema.safeParse(request.body);
 

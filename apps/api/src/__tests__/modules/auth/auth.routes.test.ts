@@ -58,11 +58,6 @@ describe('POST /auth/login', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('returns 500 when APP_PASSWORD is not configured', async () => {
-    vi.stubEnv('APP_PASSWORD', '');
-    const res = await app.inject({ method: 'POST', url: '/auth/login', body: { password: 'any' } });
-    expect(res.statusCode).toBe(500);
-  });
 });
 
 describe('POST /auth/logout', () => {

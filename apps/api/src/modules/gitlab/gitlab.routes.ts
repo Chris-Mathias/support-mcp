@@ -7,11 +7,10 @@ import {
 } from "./gitlab.schemas.js";
 import { GitlabService } from "./gitlab.service.js";
 
-const gitlabService = new GitlabService();
-
 const INVALID_PARAMS = "Parâmetros inválidos";
 
 export async function gitlabRoutes(app: FastifyInstance) {
+  const gitlabService = new GitlabService();
   app.post(
     "/projects/:projectId/gitlab-integration",
     async (request, reply) => {

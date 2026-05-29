@@ -2,9 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { createProjectSchema, projectIdParamsSchema } from "./project.schemas.js";
 import { ProjectService } from "./project.service.js";
 
-const projectService = new ProjectService();
-
 export async function projectRoutes(app: FastifyInstance) {
+  const projectService = new ProjectService();
   app.post("/projects", async (request, reply) => {
     const parsed = createProjectSchema.safeParse(request.body);
 

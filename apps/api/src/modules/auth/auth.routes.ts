@@ -32,12 +32,7 @@ export async function authRoutes(app: FastifyInstance, opts: AuthRouteOptions) {
         });
       }
 
-      const appPassword = process.env.APP_PASSWORD ?? "";
-
-      if (!appPassword) {
-        request.log.error("APP_PASSWORD não configurado");
-        return reply.status(500).send({ message: "Servidor não configurado" });
-      }
+      const appPassword = process.env.APP_PASSWORD!;
 
       const expected = Buffer.from(appPassword);
       const actual = Buffer.from(parsed.data.password);

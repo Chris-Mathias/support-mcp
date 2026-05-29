@@ -8,9 +8,8 @@ type SupportRouteOptions = {
   allowedOrigins: Set<string>;
 };
 
-const supportService = new SupportService();
-
 export async function supportRoutes(app: FastifyInstance, opts: SupportRouteOptions) {
+  const supportService = new SupportService();
   const llmRateLimit = { max: opts.rateLimitLlm, timeWindow: opts.rateLimitWindow };
   const { allowedOrigins } = opts;
 
