@@ -22,6 +22,12 @@ services:
       RATE_LIMIT_WINDOW:      ${RATE_LIMIT_WINDOW:-1m}
     volumes:
       - uploads:/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3333/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   web:
     build:
@@ -31,7 +37,8 @@ services:
         VITE_API_URL: /api
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   uploads:

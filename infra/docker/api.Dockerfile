@@ -57,6 +57,9 @@ RUN chmod +x /entrypoint.sh
 
 RUN mkdir -p /uploads
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:3333/health || exit 1
+
 EXPOSE 3333
 
 ENTRYPOINT ["/entrypoint.sh"]
