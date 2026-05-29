@@ -37,8 +37,7 @@ services:
         VITE_API_URL: /api
     restart: unless-stopped
     depends_on:
-      api:
-        condition: service_healthy
+      - api
 
 volumes:
   uploads:
