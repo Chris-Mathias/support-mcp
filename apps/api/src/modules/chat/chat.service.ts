@@ -116,12 +116,14 @@ export class ChatService {
   }
 
   async purgeExpiredSessions(retentionDays: number) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - retentionDays);
-
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
     await prisma.chatSession.deleteMany({
       where: {
-        deletedAt: { lt: cutoff },
+        OR: [
+          { deletedAt: { lt: cutoff } },
+          { closedAt: { lt: cutoff } },
+          { AND: [{ messages: { none: {} } }, { createdAt: { lt: cutoff } }] },
+        ],
       },
     });
   }
