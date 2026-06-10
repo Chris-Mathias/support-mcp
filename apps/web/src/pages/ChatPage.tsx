@@ -1,14 +1,18 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChatComposer } from "../components/chat/ChatComposer";
 import { ChatMessageList } from "../components/chat/ChatMessageList";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { WorkspacePage } from "../components/layout/WorkspacePage";
 import { AlertBanner } from "../components/ui/AlertBanner";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { useMessages } from "../hooks/use-messages";
+import { useProjects } from "../hooks/use-projects";
+import { useDeleteSession, useSessions } from "../hooks/use-sessions";
+import { queryKeys } from "../lib/query-keys";
 import { readSupportStream } from "../lib/chat-stream";
 import { api } from "../services/api";
 import type { ChatMessage, ChatSession } from "../types/chat";
-import type { Project } from "../types/project";
 
 type AskQuestionResponse = {
   answer: string;
@@ -19,53 +23,58 @@ type AskQuestionResponse = {
 
 export function ChatPage() {
   const selectedProjectStorageKey = "chat:selectedProjectId";
+  const queryClient = useQueryClient();
 
-  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState(() => {
     return localStorage.getItem(selectedProjectStorageKey) ?? "";
   });
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loadingSessions, setLoadingSessions] = useState(false);
-  const [loadingMessages, setLoadingMessages] = useState(false);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState<ChatSession | null>(null);
-  const [isDeletingSession, setIsDeletingSession] = useState(false);
 
-  // ─── Per-project state ────────────────────────────────────────────────────
+  // ─── Per-project UI state ─────────────────────────────────────────────────
 
-  // Sessions list per project — cached so switching back doesn't re-fetch
-  const [sessionsByProject, setSessionsByProject] = useState<Map<string, ChatSession[]>>(new Map());
-  // Active session per project — preserved when switching projects
+  // Active session per project — pure UI state, preserved when switching
   const [activeSessionByProject, setActiveSessionByProject] = useState<Map<string, ChatSession | null>>(new Map());
-  // Which projects have had their sessions loaded (ref = no extra render)
-  const loadedProjectsRef = useRef<Set<string>>(new Set());
 
-  // ─── Per-session state ────────────────────────────────────────────────────
+  // ─── Per-session streaming state ──────────────────────────────────────────
 
-  // Messages per session — streams update their own slot in background
-  const [messagesBySession, setMessagesBySession] = useState<Map<string, ChatMessage[]>>(new Map());
-  // Sessions whose stream is currently active
   const [sendingBySession, setSendingBySession] = useState<Set<string>>(new Set());
-  // Streaming message ID per session
   const [streamingBySession, setStreamingBySession] = useState<Map<string, string | null>>(new Map());
-  // AbortControllers per session
   const streamsRef = useRef<Map<string, AbortController>>(new Map());
 
   // Ref kept in sync with activeSession to avoid stale closure reads in async handlers
   const activeSessionRef = useRef<ChatSession | null>(null);
 
-  // ─── Derived values (same shape as before — child props unchanged) ────────
+  // ─── Server data via React Query ─────────────────────────────────────────
 
-  const sessions = sessionsByProject.get(selectedProjectId) ?? [];
+  const projectsQuery = useProjects();
+  const sessionsQuery = useSessions(selectedProjectId);
+  const deleteSessionMutation = useDeleteSession();
+
+  const projects = projectsQuery.data ?? [];
+  const sessions = sessionsQuery.data ?? [];
+
+  // ─── Derived values ───────────────────────────────────────────────────────
+
   const activeSession = activeSessionByProject.get(selectedProjectId) ?? null;
   const activeSessionId = activeSession?.id ?? "";
-  const messages = messagesBySession.get(activeSessionId) ?? [];
+
+  const messagesQuery = useMessages(activeSessionId, selectedProjectId);
+  const messages = messagesQuery.data ?? [];
+
   const sendingMessage = sendingBySession.has(activeSessionId);
   const streamingAssistantMessageId = streamingBySession.get(activeSessionId) ?? null;
 
   const canSendMessage =
     Boolean(selectedProjectId) && Boolean(content.trim()) && !sendingMessage;
+
+  const displayError =
+    error ??
+    (projectsQuery.isError ? "Não foi possível carregar os projetos." : null) ??
+    (sessionsQuery.isError ? "Não foi possível carregar o histórico de sessões." : null) ??
+    (messagesQuery.isError ? "Não foi possível carregar as mensagens da sessão." : null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -82,54 +91,6 @@ export function ChatPage() {
     };
   }, []);
 
-  // ─── Per-project helpers ──────────────────────────────────────────────────
-
-  function setProjectSessions(
-    projectId: string,
-    updater: (prev: ChatSession[]) => ChatSession[],
-  ) {
-    setSessionsByProject((map) => {
-      const next = new Map(map);
-      next.set(projectId, updater(next.get(projectId) ?? []));
-      return next;
-    });
-  }
-
-  function setProjectActiveSession(projectId: string, session: ChatSession | null) {
-    setActiveSessionByProject((map) => {
-      const next = new Map(map);
-      next.set(projectId, session);
-      return next;
-    });
-  }
-
-  // ─── Per-session helpers ──────────────────────────────────────────────────
-
-  function setSessionMessages(
-    sessionId: string,
-    updater: (prev: ChatMessage[]) => ChatMessage[],
-  ) {
-    setMessagesBySession((map) => {
-      const next = new Map(map);
-      next.set(sessionId, updater(next.get(sessionId) ?? []));
-      return next;
-    });
-  }
-
-  function abortSessionStream(sessionId: string) {
-    streamsRef.current.get(sessionId)?.abort();
-    streamsRef.current.delete(sessionId);
-  }
-
-  function clearSessionCache(sessionId: string) {
-    abortSessionStream(sessionId);
-    setMessagesBySession((m) => { const n = new Map(m); n.delete(sessionId); return n; });
-    setSendingBySession((s) => { const n = new Set(s); n.delete(sessionId); return n; });
-    setStreamingBySession((m) => { const n = new Map(m); n.delete(sessionId); return n; });
-  }
-
-  // ─── Effects ─────────────────────────────────────────────────────────────
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sendingMessage]);
@@ -141,18 +102,6 @@ export function ChatPage() {
     element.style.height = `${Math.min(element.scrollHeight, 128)}px`;
     element.style.overflowY = element.scrollHeight > 128 ? "auto" : "hidden";
   }, [content]);
-
-  useEffect(() => {
-    loadProjects()
-      .then(() => {
-        if (selectedProjectId) {
-          loadSessions(selectedProjectId);
-        }
-      })
-      .catch(() => {
-        setError("Não foi possível carregar os projetos.");
-      });
-  }, []);
 
   useEffect(() => {
     function handleClickOutside() {
@@ -174,27 +123,26 @@ export function ChatPage() {
     };
   }, []);
 
-  // ─── Data fetching ────────────────────────────────────────────────────────
+  // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  async function loadProjects() {
-    const response = await api.get<Project[]>("/projects");
-    setProjects(response.data);
+  function setProjectActiveSession(projectId: string, session: ChatSession | null) {
+    setActiveSessionByProject((map) => {
+      const next = new Map(map);
+      next.set(projectId, session);
+      return next;
+    });
   }
 
-  async function loadSessions(projectId: string) {
-    setLoadingSessions(true);
+  function abortSessionStream(sessionId: string) {
+    streamsRef.current.get(sessionId)?.abort();
+    streamsRef.current.delete(sessionId);
+  }
 
-    try {
-      const response = await api.get<ChatSession[]>(
-        `/projects/${projectId}/chat/sessions`,
-      );
-      setProjectSessions(projectId, () => response.data);
-      loadedProjectsRef.current.add(projectId);
-    } catch {
-      setError("Não foi possível carregar o histórico de sessões.");
-    } finally {
-      setLoadingSessions(false);
-    }
+  function clearSessionCache(sessionId: string) {
+    abortSessionStream(sessionId);
+    queryClient.removeQueries({ queryKey: queryKeys.messages.bySession(sessionId) });
+    setSendingBySession((s) => { const n = new Set(s); n.delete(sessionId); return n; });
+    setStreamingBySession((m) => { const n = new Map(m); n.set(sessionId, null); return n; });
   }
 
   // ─── Session actions ──────────────────────────────────────────────────────
@@ -221,7 +169,6 @@ export function ChatPage() {
       return;
     }
 
-    // Abort any in-progress stream for this specific session (re-send scenario)
     if (activeSession) abortSessionStream(activeSession.id);
 
     const controller = new AbortController();
@@ -238,19 +185,30 @@ export function ChatPage() {
         });
 
         session = sessionResponse.data;
+
+        // Pre-populate empty messages cache before enabling the query to prevent
+        // a spurious server fetch for the brand-new (empty) session
+        queryClient.setQueryData<ChatMessage[]>(
+          queryKeys.messages.bySession(session.id),
+          [],
+        );
+
         setProjectActiveSession(capturedProjectId, session);
         activeSessionRef.current = session;
 
-        setProjectSessions(capturedProjectId, (current) => {
-          const alreadyExists = current.some((item) => item.id === session!.id);
-          return alreadyExists ? current : [session!, ...current];
-        });
+        queryClient.setQueryData<ChatSession[]>(
+          queryKeys.sessions.byProject(capturedProjectId),
+          (current) => {
+            const list = current ?? [];
+            const alreadyExists = list.some((item) => item.id === session!.id);
+            return alreadyExists ? list : [session!, ...list];
+          },
+        );
       }
 
       sessionId = session.id;
-      const sid = sessionId; // non-nullable alias for use within this block
+      const sid = sessionId;
 
-      // Register the stream before any await so concurrent sends see it
       streamsRef.current.set(sid, controller);
       setSendingBySession((s) => new Set(s).add(sid));
 
@@ -271,11 +229,10 @@ export function ChatPage() {
 
       currentStreamingMessageId = streamingMessageId;
 
-      setSessionMessages(sid, (prev) => [
-        ...prev,
-        optimisticMessage,
-        streamingAssistantMessage,
-      ]);
+      queryClient.setQueryData<ChatMessage[]>(
+        queryKeys.messages.bySession(sid),
+        (prev) => [...(prev ?? []), optimisticMessage, streamingAssistantMessage],
+      );
       setStreamingBySession((m) => new Map(m).set(sid, streamingMessageId));
 
       const response = await fetch(
@@ -295,12 +252,14 @@ export function ChatPage() {
         response,
         (streamEvent) => {
           if (streamEvent.event === "delta") {
-            setSessionMessages(sid, (msgs) =>
-              msgs.map((message) =>
-                message.id === streamingMessageId
-                  ? { ...message, content: streamEvent.data.content }
-                  : message,
-              ),
+            queryClient.setQueryData<ChatMessage[]>(
+              queryKeys.messages.bySession(sid),
+              (msgs) =>
+                (msgs ?? []).map((message) =>
+                  message.id === streamingMessageId
+                    ? { ...message, content: streamEvent.data.content }
+                    : message,
+                ),
             );
             return;
           }
@@ -319,10 +278,10 @@ export function ChatPage() {
         controller.signal,
       );
 
-      // Stream abortado intencionalmente (exclusão de sessão)
       if (controller.signal.aborted) {
-        setSessionMessages(sid, (msgs) =>
-          msgs.filter((m) => m.id !== currentStreamingMessageId),
+        queryClient.setQueryData<ChatMessage[]>(
+          queryKeys.messages.bySession(sid),
+          (msgs) => (msgs ?? []).filter((m) => m.id !== currentStreamingMessageId),
         );
         return;
       }
@@ -334,34 +293,36 @@ export function ChatPage() {
       const completedPayload = finalPayload as AskQuestionResponse;
 
       if (completedPayload.session) {
-        // Always update the title in the sidebar list for the originating project
-        setProjectSessions(capturedProjectId, (current) =>
-          current.map((item) =>
-            item.id === completedPayload.session!.id
-              ? completedPayload.session!
-              : item,
-          ),
+        queryClient.setQueryData<ChatSession[]>(
+          queryKeys.sessions.byProject(capturedProjectId),
+          (current) =>
+            (current ?? []).map((item) =>
+              item.id === completedPayload.session!.id
+                ? completedPayload.session!
+                : item,
+            ),
         );
 
-        // Only update activeSession if the user is still viewing this session
         if (activeSessionRef.current?.id === sid) {
           setProjectActiveSession(capturedProjectId, completedPayload.session);
         }
       }
 
-      setSessionMessages(sid, (msgs) =>
-        msgs.map((message) =>
-          message.id === streamingMessageId
-            ? completedPayload.assistantMessage
-            : message,
-        ),
+      queryClient.setQueryData<ChatMessage[]>(
+        queryKeys.messages.bySession(sid),
+        (msgs) =>
+          (msgs ?? []).map((message) =>
+            message.id === streamingMessageId
+              ? completedPayload.assistantMessage
+              : message,
+          ),
       );
     } catch (error) {
-      // AbortError: fetch abortado antes de conectar — cleanup silencioso
       if (error instanceof DOMException && error.name === "AbortError") {
         if (sessionId) {
-          setSessionMessages(sessionId, (msgs) =>
-            msgs.filter((m) => m.id !== currentStreamingMessageId),
+          queryClient.setQueryData<ChatMessage[]>(
+            queryKeys.messages.bySession(sessionId),
+            (msgs) => (msgs ?? []).filter((m) => m.id !== currentStreamingMessageId),
           );
         }
         return;
@@ -369,8 +330,9 @@ export function ChatPage() {
 
       setContent(question);
       if (sessionId) {
-        setSessionMessages(sessionId, (msgs) =>
-          msgs.filter((m) => m.id !== currentStreamingMessageId),
+        queryClient.setQueryData<ChatMessage[]>(
+          queryKeys.messages.bySession(sessionId),
+          (msgs) => (msgs ?? []).filter((m) => m.id !== currentStreamingMessageId),
         );
       }
       setError("Não foi possível enviar a mensagem.");
@@ -379,7 +341,6 @@ export function ChatPage() {
         streamsRef.current.delete(sessionId);
         setSendingBySession((s) => { const n = new Set(s); n.delete(sessionId!); return n; });
         setStreamingBySession((m) => { const n = new Map(m); n.set(sessionId!, null); return n; });
-        // Only refocus if the user is still viewing this session
         if (activeSessionRef.current?.id === sessionId) {
           textareaRef.current?.focus();
         }
@@ -388,7 +349,6 @@ export function ChatPage() {
   }
 
   function handleChangeProject(projectId: string) {
-    // Do NOT abort streams — let them continue in background
     setSelectedProjectId(projectId);
     setContent("");
     setError(null);
@@ -396,45 +356,20 @@ export function ChatPage() {
 
     if (projectId) {
       localStorage.setItem(selectedProjectStorageKey, projectId);
-      // Only fetch if this project's sessions haven't been loaded yet
-      if (!loadedProjectsRef.current.has(projectId)) {
-        loadSessions(projectId).catch(() => {
-          setError("Não foi possível carregar o histórico de sessões.");
-        });
-      }
+      // React Query handles fetching via useSessions — cached if already loaded
     } else {
       localStorage.removeItem(selectedProjectStorageKey);
     }
   }
 
-  async function handleSelectSession(session: ChatSession) {
+  function handleSelectSession(session: ChatSession) {
     if (!selectedProjectId || activeSession?.id === session.id) return;
 
-    // Do NOT abort — let any in-progress stream continue in the background
     setProjectActiveSession(selectedProjectId, session);
     setError(null);
     setOpenMenuSessionId(null);
-
-    // If messages are already cached (active stream or previous visit), just switch the view
-    if (messagesBySession.has(session.id)) {
-      textareaRef.current?.focus();
-      return;
-    }
-
-    setLoadingMessages(true);
-
-    try {
-      const response = await api.get<ChatMessage[]>(
-        `/chat/sessions/${session.id}/messages`,
-        { params: { projectId: selectedProjectId } },
-      );
-      setSessionMessages(session.id, () => response.data);
-      textareaRef.current?.focus();
-    } catch {
-      setError("Não foi possível carregar as mensagens da sessão.");
-    } finally {
-      setLoadingMessages(false);
-    }
+    textareaRef.current?.focus();
+    // React Query fetches messages via useMessages if not already cached
   }
 
   async function handleDeleteSession() {
@@ -443,26 +378,20 @@ export function ChatPage() {
     const sessionId = deletingSession.id;
     abortSessionStream(sessionId);
     clearSessionCache(sessionId);
-
-    setIsDeletingSession(true);
     setError(null);
 
+    if (activeSession?.id === sessionId) {
+      setProjectActiveSession(selectedProjectId, null);
+    }
+
     try {
-      await api.delete(`/chat/sessions/${sessionId}`, {
-        data: { projectId: selectedProjectId },
+      await deleteSessionMutation.mutateAsync({
+        sessionId,
+        projectId: selectedProjectId,
       });
-
-      setProjectSessions(selectedProjectId, (current) =>
-        current.filter((session) => session.id !== sessionId),
-      );
-
-      if (activeSession?.id === sessionId) {
-        setProjectActiveSession(selectedProjectId, null);
-      }
     } catch {
       setError("Não foi possível excluir a conversa.");
     } finally {
-      setIsDeletingSession(false);
       setDeletingSession(null);
     }
   }
@@ -475,7 +404,7 @@ export function ChatPage() {
             projects={projects}
             selectedProjectId={selectedProjectId}
             sessions={sessions}
-            loadingSessions={loadingSessions}
+            loadingSessions={sessionsQuery.isLoading}
             activeSessionId={activeSession?.id ?? null}
             openMenuSessionId={openMenuSessionId}
             sendingBySession={sendingBySession}
@@ -491,11 +420,13 @@ export function ChatPage() {
           />
         }
       >
-        {error ? <AlertBanner className="m-4">{error}</AlertBanner> : null}
+        {displayError ? (
+          <AlertBanner className="m-4">{displayError}</AlertBanner>
+        ) : null}
 
         <ChatMessageList
           selectedProjectId={selectedProjectId}
-          loadingMessages={loadingMessages}
+          loadingMessages={messagesQuery.isLoading}
           hasActiveSession={Boolean(activeSession)}
           messages={messages}
           sendingMessage={sendingMessage}
@@ -518,7 +449,7 @@ export function ChatPage() {
         <ConfirmDialog
           title="Excluir conversa?"
           description={`"${deletingSession.title ?? "Novo Chat"}" será movida para a lixeira e removida permanentemente após 30 dias.`}
-          loading={isDeletingSession}
+          loading={deleteSessionMutation.isPending}
           onConfirm={handleDeleteSession}
           onCancel={() => setDeletingSession(null)}
         />

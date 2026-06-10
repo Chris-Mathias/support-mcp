@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   Calendar,
   FolderKanban,
@@ -9,46 +9,44 @@ import { WorkspacePage } from "../components/layout/WorkspacePage";
 import { AlertBanner } from "../components/ui/AlertBanner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
+import { useCreateProject, useProjects } from "../hooks/use-projects";
 import { getApiErrorMessage } from "../lib/errors";
 import { formatDate } from "../lib/format";
-import { api } from "../services/api";
-import type { Project } from "../types/project";
 
 export function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projectsQuery = useProjects();
+  const createProject = useCreateProject();
+  const projects = projectsQuery.data ?? [];
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadProjects().catch((error) =>
-      setError(getApiErrorMessage(error, "Não foi possível carregar os projetos.")),
-    );
-  }, []);
-
-  async function loadProjects() {
-    const response = await api.get<Project[]>("/projects");
-    setProjects(response.data);
-  }
+  const error =
+    (projectsQuery.error
+      ? getApiErrorMessage(
+          projectsQuery.error,
+          "Não foi possível carregar os projetos.",
+        )
+      : null) ??
+    (createProject.error
+      ? getApiErrorMessage(
+          createProject.error,
+          "Não foi possível criar o projeto.",
+        )
+      : null);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setLoading(true);
-    setError(null);
-
+    createProject.reset();
     try {
-      await api.post("/projects", {
+      await createProject.mutateAsync({
         name,
         description: description || undefined,
       });
       setName("");
       setDescription("");
-      await loadProjects();
-    } catch (error) {
-      setError(getApiErrorMessage(error, "Não foi possível criar o projeto."));
-    } finally {
-      setLoading(false);
+    } catch {
+      // error surfaced via createProject.error
     }
   }
 
@@ -104,10 +102,10 @@ export function ProjectsPage() {
 
               <button
                 type="submit"
-                disabled={loading || !name.trim()}
+                disabled={createProject.isPending || !name.trim()}
                 className="w-full rounded-xl bg-zinc-800 px-6 py-2.5 font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
               >
-                {loading ? "Criando..." : "Criar Projeto"}
+                {createProject.isPending ? "Criando..." : "Criar Projeto"}
               </button>
             </form>
           </Panel>

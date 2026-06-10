@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   CheckCircle,
   GitBranch,
-  Info,
   RefreshCw,
   Save,
   Settings,
@@ -12,13 +11,11 @@ import { AlertBanner } from "../components/ui/AlertBanner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
 import { ProjectSelect } from "../components/ui/ProjectSelect";
+import { useGitlabIntegration, useSaveGitlabIntegration } from "../hooks/use-gitlab";
+import { useProjects } from "../hooks/use-projects";
 import { getApiErrorMessage } from "../lib/errors";
-import { api } from "../services/api";
-import type { GitlabIntegration } from "../types/gitlab";
-import type { Project } from "../types/project";
 
 export function GitlabIntegrationPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
 
   const [repoUrl, setRepoUrl] = useState("");
@@ -26,88 +23,55 @@ export function GitlabIntegrationPage() {
   const [branch, setBranch] = useState("main");
   const [token, setToken] = useState("");
 
-  const [integration, setIntegration] = useState<GitlabIntegration | null>(
-    null,
-  );
+  const projectsQuery = useProjects();
+  const gitlabQuery = useGitlabIntegration(selectedProjectId);
+  const saveIntegration = useSaveGitlabIntegration(selectedProjectId);
 
-  const [loadingProjects, setLoadingProjects] = useState(false);
-  const [loadingIntegration, setLoadingIntegration] = useState(false);
-  const [savingIntegration, setSavingIntegration] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const projects = projectsQuery.data ?? [];
+  const integration = gitlabQuery.data ?? null;
 
+  // Sync form fields when integration data arrives or project changes
   useEffect(() => {
-    setLoadingProjects(true);
+    if (integration) {
+      setRepoUrl(integration.repoUrl);
+      setProjectPath(integration.projectPath);
+      setBranch(integration.branch);
+      setToken("");
+    } else {
+      setRepoUrl("");
+      setProjectPath("");
+      setBranch("main");
+      setToken("");
+    }
+  }, [integration]);
 
-    api
-      .get<Project[]>("/projects")
-      .then((response) => setProjects(response.data))
-      .catch((error) =>
-        setError(
-          getApiErrorMessage(error, "Não foi possível carregar os projetos."),
-        ),
-      )
-      .finally(() => setLoadingProjects(false));
-  }, []);
+  const error =
+    (saveIntegration.error
+      ? getApiErrorMessage(saveIntegration.error, "Não foi possível salvar a integração.")
+      : null) ??
+    (gitlabQuery.error
+      ? getApiErrorMessage(gitlabQuery.error, "Não foi possível carregar a integração.")
+      : null);
 
-  async function handleProjectChange(projectId: string) {
+  function handleProjectChange(projectId: string) {
     setSelectedProjectId(projectId);
-    setError(null);
-
-    if (!projectId) {
-      setIntegration(null);
-      setRepoUrl("");
-      setProjectPath("");
-      setBranch("main");
-      setToken("");
-      return;
-    }
-
-    setLoadingIntegration(true);
-
-    try {
-      const response = await api.get<GitlabIntegration>(
-        `/projects/${projectId}/gitlab-integration`,
-      );
-      setIntegration(response.data);
-      setRepoUrl(response.data.repoUrl);
-      setProjectPath(response.data.projectPath);
-      setBranch(response.data.branch);
-      setToken("");
-    } catch {
-      setIntegration(null);
-      setRepoUrl("");
-      setProjectPath("");
-      setBranch("main");
-      setToken("");
-    } finally {
-      setLoadingIntegration(false);
-    }
+    saveIntegration.reset();
   }
 
   async function handleSaveIntegration() {
     if (!selectedProjectId) return;
 
-    setSavingIntegration(true);
-    setError(null);
-
+    saveIntegration.reset();
     try {
-      const response = await api.post<GitlabIntegration>(
-        `/projects/${selectedProjectId}/gitlab-integration`,
-        {
-          repoUrl,
-          projectPath,
-          branch,
-          ...(token ? { token } : {}),
-        },
-      );
-      setIntegration(response.data);
+      await saveIntegration.mutateAsync({
+        repoUrl,
+        projectPath,
+        branch,
+        ...(token ? { token } : {}),
+      });
       setToken("");
-    } catch (error) {
-      setError(
-        getApiErrorMessage(error, "Não foi possível salvar a integração."),
-      );
-    } finally {
-      setSavingIntegration(false);
+    } catch {
+      // error surfaced via saveIntegration.error
     }
   }
 
@@ -129,7 +93,7 @@ export function GitlabIntegrationPage() {
             value={selectedProjectId}
             projects={projects}
             placeholder="Selecione..."
-            disabled={loadingProjects}
+            disabled={projectsQuery.isLoading}
             onChange={handleProjectChange}
           />
 
@@ -139,7 +103,7 @@ export function GitlabIntegrationPage() {
             </div>
           ) : null}
 
-          {selectedProjectId && !loadingIntegration ? (
+          {selectedProjectId && !gitlabQuery.isLoading ? (
             <Panel className="p-5">
               <div className="grid grid-cols-1 gap-4">
                 <div>
@@ -202,7 +166,7 @@ export function GitlabIntegrationPage() {
                 <button
                   onClick={handleSaveIntegration}
                   disabled={
-                    savingIntegration ||
+                    saveIntegration.isPending ||
                     !repoUrl ||
                     !projectPath ||
                     (!integration?.tokenConfigured && !token)
@@ -210,7 +174,7 @@ export function GitlabIntegrationPage() {
                   className="flex items-center justify-center gap-2 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
                 >
                   <Save size={16} />
-                  {savingIntegration ? "Salvando..." : "Salvar Configuração"}
+                  {saveIntegration.isPending ? "Salvando..." : "Salvar Configuração"}
                 </button>
               </div>
             </Panel>
@@ -227,7 +191,7 @@ export function GitlabIntegrationPage() {
           description="As configurações do repositório aparecem aqui depois que um projeto for escolhido."
           className="flex-1"
         />
-      ) : loadingIntegration ? (
+      ) : gitlabQuery.isLoading ? (
         <div className="flex flex-1 items-center justify-center text-zinc-400 dark:text-zinc-500">
           <RefreshCw size={26} className="animate-spin" />
         </div>

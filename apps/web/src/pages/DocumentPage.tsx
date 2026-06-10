@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle,
@@ -15,11 +15,11 @@ import { AlertBanner } from "../components/ui/AlertBanner";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
 import { ProjectSelect } from "../components/ui/ProjectSelect";
+import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/use-documents";
+import { useProjects } from "../hooks/use-projects";
 import { getApiErrorMessage } from "../lib/errors";
 import { formatDate, formatFileSize } from "../lib/format";
-import { api } from "../services/api";
 import type { DocumentProcessingStatus, ProjectDocument } from "../types/document";
-import type { Project } from "../types/project";
 
 const PROCESSING_ERROR_MESSAGES: Record<string, string> = {
   PDF_TEXT_EXTRACTION_EMPTY: "Não foi possível extrair texto deste PDF (possivelmente escaneado).",
@@ -69,53 +69,36 @@ function StatusBadge({ status, error }: { status: DocumentProcessingStatus; erro
 }
 
 export function DocumentsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .get<Project[]>("/projects")
-      .then((res) => setProjects(res.data))
-      .catch((error) => setError(getApiErrorMessage(error, "Não foi possível carregar os projetos.")));
-  }, []);
+  const projectsQuery = useProjects();
+  const documentsQuery = useDocuments(selectedProjectId);
+  const uploadDocument = useUploadDocument(selectedProjectId);
+  const deleteDocument = useDeleteDocument(selectedProjectId);
 
-  async function loadDocuments(projectId: string) {
-    const response = await api.get<ProjectDocument[]>(
-      `/projects/${projectId}/documents`,
-    );
-    setDocuments(response.data);
-  }
+  const projects = projectsQuery.data ?? [];
+  const documents = documentsQuery.data ?? [];
 
-  useEffect(() => {
-    const hasProcessing = documents.some(
-      (d) => d.processingStatus === "PROCESSING" || d.processingStatus === "PENDING",
-    );
-    if (!hasProcessing || !selectedProjectId) return;
+  const displayError =
+    error ??
+    (projectsQuery.error
+      ? getApiErrorMessage(projectsQuery.error, "Não foi possível carregar os projetos.")
+      : null) ??
+    (uploadDocument.error
+      ? getApiErrorMessage(uploadDocument.error, "Não foi possível enviar o documento.")
+      : null) ??
+    (deleteDocument.error
+      ? getApiErrorMessage(deleteDocument.error, "Não foi possível excluir o documento.")
+      : null);
 
-    const interval = setInterval(() => {
-      loadDocuments(selectedProjectId).catch(() => {});
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [documents, selectedProjectId]);
-
-  async function handleProjectChange(projectId: string) {
+  function handleProjectChange(projectId: string) {
     setSelectedProjectId(projectId);
-    setDocuments([]);
     setSelectedFile(null);
     setError(null);
-
-    if (!projectId) return;
-
-    try {
-      await loadDocuments(projectId);
-    } catch (error) {
-      setError(getApiErrorMessage(error, "Não foi possível carregar os documentos."));
-    }
+    uploadDocument.reset();
+    deleteDocument.reset();
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -125,34 +108,24 @@ export function DocumentsPage() {
   async function handleUpload() {
     if (!selectedProjectId || !selectedFile) return;
 
-    setLoading(true);
+    uploadDocument.reset();
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      await api.post(`/projects/${selectedProjectId}/documents`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
+      await uploadDocument.mutateAsync(selectedFile);
       setSelectedFile(null);
-      await loadDocuments(selectedProjectId);
-    } catch (error) {
-      setError(getApiErrorMessage(error, "Não foi possível enviar o documento."));
-    } finally {
-      setLoading(false);
+    } catch {
+      // error surfaced via uploadDocument.error
     }
   }
 
   async function handleDelete(documentId: string) {
-    if (!selectedProjectId) return;
-
+    deleteDocument.reset();
+    setError(null);
     try {
-      await api.delete(`/projects/${selectedProjectId}/documents/${documentId}`);
-      await loadDocuments(selectedProjectId);
-    } catch (error) {
-      setError(getApiErrorMessage(error, "Não foi possível excluir o documento."));
+      await deleteDocument.mutateAsync(documentId);
+    } catch {
+      // error surfaced via deleteDocument.error
     }
   }
 
@@ -203,16 +176,16 @@ export function DocumentsPage() {
               {selectedFile ? (
                 <button
                   onClick={handleUpload}
-                  disabled={loading}
+                  disabled={uploadDocument.isPending}
                   className="mt-4 w-full rounded-xl bg-zinc-800 py-2.5 font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
                 >
-                  {loading ? "Enviando..." : "Fazer Upload"}
+                  {uploadDocument.isPending ? "Enviando..." : "Fazer Upload"}
                 </button>
               ) : null}
             </Panel>
           ) : null}
 
-          {error ? <AlertBanner>{error}</AlertBanner> : null}
+          {displayError ? <AlertBanner>{displayError}</AlertBanner> : null}
         </div>
       }
     >
