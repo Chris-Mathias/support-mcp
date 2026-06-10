@@ -6,6 +6,7 @@ import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { WorkspacePage } from "../components/layout/WorkspacePage";
 import { AlertBanner } from "../components/ui/AlertBanner";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { useSelectedProject } from "../contexts/selected-project";
 import { useMessages } from "../hooks/use-messages";
 import { useProjects } from "../hooks/use-projects";
 import { useDeleteSession, useSessions } from "../hooks/use-sessions";
@@ -22,12 +23,8 @@ type AskQuestionResponse = {
 };
 
 export function ChatPage() {
-  const selectedProjectStorageKey = "chat:selectedProjectId";
   const queryClient = useQueryClient();
-
-  const [selectedProjectId, setSelectedProjectId] = useState(() => {
-    return localStorage.getItem(selectedProjectStorageKey) ?? "";
-  });
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
@@ -353,13 +350,7 @@ export function ChatPage() {
     setContent("");
     setError(null);
     setOpenMenuSessionId(null);
-
-    if (projectId) {
-      localStorage.setItem(selectedProjectStorageKey, projectId);
-      // React Query handles fetching via useSessions — cached if already loaded
-    } else {
-      localStorage.removeItem(selectedProjectStorageKey);
-    }
+    // React Query handles fetching via useSessions — cached if already loaded
   }
 
   function handleSelectSession(session: ChatSession) {

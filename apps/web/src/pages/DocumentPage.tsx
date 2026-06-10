@@ -1,4 +1,5 @@
 import { ChangeEvent, useState } from "react";
+import { useSelectedProject } from "../contexts/selected-project";
 import {
   AlertTriangle,
   CheckCircle,
@@ -69,7 +70,7 @@ function StatusBadge({ status, error }: { status: DocumentProcessingStatus; erro
 }
 
 export function DocumentsPage() {
-  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 

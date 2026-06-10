@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSelectedProject } from "../contexts/selected-project";
 import {
   CheckCircle,
   GitBranch,
@@ -16,7 +17,7 @@ import { useProjects } from "../hooks/use-projects";
 import { getApiErrorMessage } from "../lib/errors";
 
 export function GitlabIntegrationPage() {
-  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
 
   const [repoUrl, setRepoUrl] = useState("");
   const [projectPath, setProjectPath] = useState("");

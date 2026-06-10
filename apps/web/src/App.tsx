@@ -12,6 +12,7 @@ import { DocumentsPage } from "./pages/DocumentPage";
 import { GitlabIntegrationPage } from "./pages/GitlabIntegrationPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { SelectedProjectProvider } from "./contexts/selected-project";
 import { api } from "./services/api";
 
 type Tab = "chat" | "projects" | "documents" | "gitlab";
@@ -91,17 +92,19 @@ export function App() {
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">
-        <div className={activeTab === "chat" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
-          <ChatPage />
-        </div>
+        <SelectedProjectProvider>
+          <div className={activeTab === "chat" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
+            <ChatPage />
+          </div>
+          <div className={activeTab === "documents" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
+            <DocumentsPage />
+          </div>
+          <div className={activeTab === "gitlab" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
+            <GitlabIntegrationPage />
+          </div>
+        </SelectedProjectProvider>
         <div className={activeTab === "projects" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
           <ProjectsPage />
-        </div>
-        <div className={activeTab === "documents" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
-          <DocumentsPage />
-        </div>
-        <div className={activeTab === "gitlab" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
-          <GitlabIntegrationPage />
         </div>
       </main>
     </div>
