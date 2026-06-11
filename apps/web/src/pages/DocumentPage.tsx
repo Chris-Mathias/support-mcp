@@ -1,5 +1,5 @@
 import { ChangeEvent, useState } from "react";
-import { useSelectedProject } from "../contexts/selected-project";
+import { useSelectedProject } from "../hooks/use-selected-project";
 import {
   AlertTriangle,
   CheckCircle,

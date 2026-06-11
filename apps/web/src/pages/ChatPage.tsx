@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useMatch, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChatComposer } from "../components/chat/ChatComposer";
 import { ChatMessageList } from "../components/chat/ChatMessageList";
@@ -6,9 +7,10 @@ import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { WorkspacePage } from "../components/layout/WorkspacePage";
 import { AlertBanner } from "../components/ui/AlertBanner";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
-import { useSelectedProject } from "../contexts/selected-project";
 import { useMessages } from "../hooks/use-messages";
 import { useProjects } from "../hooks/use-projects";
+import { useSessionResolver } from "../hooks/use-session-resolver";
+import { useSelectedProject } from "../hooks/use-selected-project";
 import { useDeleteSession, useSessions } from "../hooks/use-sessions";
 import { queryKeys } from "../lib/query-keys";
 import { readSupportStream } from "../lib/chat-stream";
@@ -23,17 +25,18 @@ type AskQuestionResponse = {
 };
 
 export function ChatPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { selectedProjectId, setSelectedProjectId } = useSelectedProject();
+
+  // Active session comes from the URL — /chat/:sessionId
+  const sessionMatch = useMatch("/chat/:sessionId");
+  const activeSessionId = sessionMatch?.params.sessionId ?? "";
+
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState<ChatSession | null>(null);
-
-  // ─── Per-project UI state ─────────────────────────────────────────────────
-
-  // Active session per project — pure UI state, preserved when switching
-  const [activeSessionByProject, setActiveSessionByProject] = useState<Map<string, ChatSession | null>>(new Map());
 
   // ─── Per-session streaming state ──────────────────────────────────────────
 
@@ -41,7 +44,7 @@ export function ChatPage() {
   const [streamingBySession, setStreamingBySession] = useState<Map<string, string | null>>(new Map());
   const streamsRef = useRef<Map<string, AbortController>>(new Map());
 
-  // Ref kept in sync with activeSession to avoid stale closure reads in async handlers
+  // Kept in sync with activeSession to avoid stale closure reads in async handlers
   const activeSessionRef = useRef<ChatSession | null>(null);
 
   // ─── Server data via React Query ─────────────────────────────────────────
@@ -50,13 +53,18 @@ export function ChatPage() {
   const sessionsQuery = useSessions(selectedProjectId);
   const deleteSessionMutation = useDeleteSession();
 
+  // Cold-start resolver: when the page opens directly at /chat/:sessionId,
+  // fetches the session once and hydrates project + sessions + messages caches.
+  const sessionResolver = useSessionResolver(activeSessionId);
+
   const projects = projectsQuery.data ?? [];
   const sessions = sessionsQuery.data ?? [];
 
   // ─── Derived values ───────────────────────────────────────────────────────
 
-  const activeSession = activeSessionByProject.get(selectedProjectId) ?? null;
-  const activeSessionId = activeSession?.id ?? "";
+  // Sessions load after selectedProjectId is set by the resolver — so this
+  // correctly finds the session once both are ready.
+  const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
 
   const messagesQuery = useMessages(activeSessionId, selectedProjectId);
   const messages = messagesQuery.data ?? [];
@@ -65,13 +73,17 @@ export function ChatPage() {
   const streamingAssistantMessageId = streamingBySession.get(activeSessionId) ?? null;
 
   const canSendMessage =
-    Boolean(selectedProjectId) && Boolean(content.trim()) && !sendingMessage;
+    Boolean(selectedProjectId) &&
+    Boolean(content.trim()) &&
+    !sendingMessage &&
+    !sessionsQuery.isLoading;
 
   const displayError =
     error ??
     (projectsQuery.isError ? "Não foi possível carregar os projetos." : null) ??
     (sessionsQuery.isError ? "Não foi possível carregar o histórico de sessões." : null) ??
-    (messagesQuery.isError ? "Não foi possível carregar as mensagens da sessão." : null);
+    (messagesQuery.isError ? "Não foi possível carregar as mensagens da sessão." : null) ??
+    (sessionResolver.isError ? "Sessão não encontrada." : null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -80,6 +92,7 @@ export function ChatPage() {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
 
+  // Abort all streams on unmount (navigating away from /chat entirely)
   useEffect(() => {
     return () => {
       for (const controller of streamsRef.current.values()) {
@@ -104,31 +117,36 @@ export function ChatPage() {
     function handleClickOutside() {
       setOpenMenuSessionId(null);
     }
-
     function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpenMenuSessionId(null);
-      }
+      if (event.key === "Escape") setOpenMenuSessionId(null);
     }
-
     window.addEventListener("click", handleClickOutside);
     window.addEventListener("keydown", handleEscape);
-
     return () => {
       window.removeEventListener("click", handleClickOutside);
       window.removeEventListener("keydown", handleEscape);
     };
   }, []);
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
+  // Auto-select the project when resolving a session URL on cold start.
+  // Must live here — each useSelectedProject() call creates an independent
+  // useState slot, so only this component can update its own selectedProjectId.
+  useEffect(() => {
+    if (!sessionResolver.data) return;
+    const resolvedProjectId = sessionResolver.data.projectId;
+    if (selectedProjectId !== resolvedProjectId) {
+      setSelectedProjectId(resolvedProjectId);
+    }
+  }, [sessionResolver.data, selectedProjectId, setSelectedProjectId]);
 
-  function setProjectActiveSession(projectId: string, session: ChatSession | null) {
-    setActiveSessionByProject((map) => {
-      const next = new Map(map);
-      next.set(projectId, session);
-      return next;
-    });
-  }
+  // Navigate away when a session URL points to a deleted or non-existent session
+  useEffect(() => {
+    if (sessionResolver.isSuccess && sessionResolver.data === null) {
+      navigate("/chat", { replace: true });
+    }
+  }, [sessionResolver.isSuccess, sessionResolver.data, navigate]);
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
 
   function abortSessionStream(sessionId: string) {
     streamsRef.current.get(sessionId)?.abort();
@@ -146,9 +164,8 @@ export function ChatPage() {
 
   function handleStartSession() {
     if (!selectedProjectId) return;
-
     if (activeSession) abortSessionStream(activeSession.id);
-    setProjectActiveSession(selectedProjectId, null);
+    navigate("/chat");
     setError(null);
     setOpenMenuSessionId(null);
     textareaRef.current?.focus();
@@ -162,7 +179,7 @@ export function ChatPage() {
     let currentStreamingMessageId: string | null = null;
     let sessionId: string | null = null;
 
-    if (!capturedProjectId || !question || sendingMessage) {
+    if (!capturedProjectId || !question || sendingMessage || sessionsQuery.isLoading) {
       return;
     }
 
@@ -183,14 +200,15 @@ export function ChatPage() {
 
         session = sessionResponse.data;
 
-        // Pre-populate empty messages cache before enabling the query to prevent
-        // a spurious server fetch for the brand-new (empty) session
+        // Pre-populate empty messages cache before the query becomes enabled
         queryClient.setQueryData<ChatMessage[]>(
           queryKeys.messages.bySession(session.id),
           [],
         );
 
-        setProjectActiveSession(capturedProjectId, session);
+        // Update URL — ChatPage stays mounted because /chat/:sessionId
+        // is a child of the /chat parent route
+        navigate("/chat/" + session.id);
         activeSessionRef.current = session;
 
         queryClient.setQueryData<ChatSession[]>(
@@ -290,6 +308,7 @@ export function ChatPage() {
       const completedPayload = finalPayload as AskQuestionResponse;
 
       if (completedPayload.session) {
+        // Update session title in the sidebar list
         queryClient.setQueryData<ChatSession[]>(
           queryKeys.sessions.byProject(capturedProjectId),
           (current) =>
@@ -299,10 +318,7 @@ export function ChatPage() {
                 : item,
             ),
         );
-
-        if (activeSessionRef.current?.id === sid) {
-          setProjectActiveSession(capturedProjectId, completedPayload.session);
-        }
+        // activeSession is derived from sessions list — re-renders automatically
       }
 
       queryClient.setQueryData<ChatMessage[]>(
@@ -350,17 +366,15 @@ export function ChatPage() {
     setContent("");
     setError(null);
     setOpenMenuSessionId(null);
-    // React Query handles fetching via useSessions — cached if already loaded
+    navigate("/chat");
   }
 
   function handleSelectSession(session: ChatSession) {
     if (!selectedProjectId || activeSession?.id === session.id) return;
-
-    setProjectActiveSession(selectedProjectId, session);
+    navigate("/chat/" + session.id);
     setError(null);
     setOpenMenuSessionId(null);
     textareaRef.current?.focus();
-    // React Query fetches messages via useMessages if not already cached
   }
 
   async function handleDeleteSession() {
@@ -372,7 +386,7 @@ export function ChatPage() {
     setError(null);
 
     if (activeSession?.id === sessionId) {
-      setProjectActiveSession(selectedProjectId, null);
+      navigate("/chat", { replace: true });
     }
 
     try {
@@ -396,7 +410,7 @@ export function ChatPage() {
             selectedProjectId={selectedProjectId}
             sessions={sessions}
             loadingSessions={sessionsQuery.isLoading}
-            activeSessionId={activeSession?.id ?? null}
+            activeSessionId={activeSessionId}
             openMenuSessionId={openMenuSessionId}
             sendingBySession={sendingBySession}
             onChangeProject={handleChangeProject}

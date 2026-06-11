@@ -1,34 +1,27 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import {
-  FileText,
-  FolderKanban,
-  GitBranch,
-  MessageSquare,
-} from "lucide-react";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppHeader } from "./components/app/AppHeader";
 import { ChatPage } from "./pages/ChatPage";
 import { DocumentsPage } from "./pages/DocumentPage";
 import { GitlabIntegrationPage } from "./pages/GitlabIntegrationPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
-import { SelectedProjectProvider } from "./contexts/selected-project";
 import { api } from "./services/api";
 
-type Tab = "chat" | "projects" | "documents" | "gitlab";
 type Theme = "light" | "dark";
 type AuthState = "loading" | "authenticated" | "unauthenticated";
 
-const navItems = [
-  { id: "chat", label: "Suporte", icon: MessageSquare },
-  { id: "projects", label: "Projetos", icon: FolderKanban },
-  { id: "documents", label: "Documentos", icon: FileText },
-  { id: "gitlab", label: "GitLab", icon: GitBranch },
-] as const;
+function PageLayout() {
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <Outlet />
+    </div>
+  );
+}
 
 export function App() {
   const [authState, setAuthState] = useState<AuthState>("loading");
-  const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [theme, setTheme] = useState<Theme>(() =>
     localStorage.getItem("theme") === "dark" ? "dark" : "light",
   );
@@ -81,32 +74,29 @@ export function App() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-50 font-sans text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
-      <AppHeader
-        navItems={navItems}
-        activeTab={activeTab}
-        isDark={isDark}
-        onChangeTab={setActiveTab}
-        onToggleTheme={toggleTheme}
-        onLogout={handleLogout}
-      />
-
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <SelectedProjectProvider>
-          <div className={activeTab === "chat" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
-            <ChatPage />
-          </div>
-          <div className={activeTab === "documents" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
-            <DocumentsPage />
-          </div>
-          <div className={activeTab === "gitlab" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
-            <GitlabIntegrationPage />
-          </div>
-        </SelectedProjectProvider>
-        <div className={activeTab === "projects" ? "flex flex-1 flex-col overflow-hidden" : "hidden"}>
-          <ProjectsPage />
-        </div>
-      </main>
-    </div>
+    <BrowserRouter>
+      <div className="flex h-screen flex-col bg-zinc-50 font-sans text-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+        <AppHeader
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+          onLogout={handleLogout}
+        />
+        <main className="flex flex-1 flex-col overflow-hidden">
+          <Routes>
+            <Route path="/" element={<Navigate to="/chat" replace />} />
+            <Route element={<PageLayout />}>
+              {/* /chat stays mounted when navigating between /chat and /chat/:sessionId */}
+              <Route path="/chat" element={<ChatPage />}>
+                <Route index />
+                <Route path=":sessionId" />
+              </Route>
+              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/gitlab" element={<GitlabIntegrationPage />} />
+            </Route>
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
   );
 }

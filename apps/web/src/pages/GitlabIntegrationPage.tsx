@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSelectedProject } from "../contexts/selected-project";
+import { useSelectedProject } from "../hooks/use-selected-project";
 import {
   CheckCircle,
   GitBranch,
